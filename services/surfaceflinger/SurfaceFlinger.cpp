@@ -134,6 +134,7 @@
 #include "FrontEnd/LayerCreationArgs.h"
 #include "FrontEnd/LayerHandle.h"
 #include "FrontEnd/LayerLifecycleManager.h"
+#include "FrontEnd/LayerLog.h"
 #include "FrontEnd/LayerSnapshot.h"
 #include "HdrLayerInfoReporter.h"
 #include "Layer.h"
@@ -863,28 +864,30 @@ void SurfaceFlinger::init() FTL_FAKE_GUARD(kMainThreadContext) {
         ALOGE("Run StartPropertySetThread failed!");
     }
 
-    if (mTransactionTracing) {
-        TransactionTraceWriter::getInstance().setWriterFunction([&](const std::string& prefix,
-                                                                    bool overwrite) {
-            auto writeFn = [&]() {
-                const std::string filename =
-                        TransactionTracing::DIR_NAME + prefix + TransactionTracing::FILE_NAME;
-                if (!overwrite && access(filename.c_str(), F_OK) == 0) {
-                    ALOGD("TransactionTraceWriter: file=%s already exists", filename.c_str());
-                    return;
-                }
-                mTransactionTracing->flush();
-                mTransactionTracing->writeToFile(filename);
-            };
-            if (std::this_thread::get_id() == mMainThreadId) {
-                writeFn();
-            } else {
-                mScheduler->schedule(writeFn).get();
-            }
-        });
-    }
-
+    initTransactionTraceWriter();
     ALOGV("Done initializing");
+}
+
+void SurfaceFlinger::initTransactionTraceWriter() {
+    if (!mTransactionTracing) {
+        return;
+    }
+    TransactionTraceWriter::getInstance().setWriterFunction(
+            [&](const std::string& filename, bool overwrite) {
+                auto writeFn = [&]() {
+                    if (!overwrite && access(filename.c_str(), F_OK) == 0) {
+                        ALOGD("TransactionTraceWriter: file=%s already exists", filename.c_str());
+                        return;
+                    }
+                    mTransactionTracing->flush();
+                    mTransactionTracing->writeToFile(filename);
+                };
+                if (std::this_thread::get_id() == mMainThreadId) {
+                    writeFn();
+                } else {
+                    mScheduler->schedule(writeFn).get();
+                }
+            });
 }
 
 void SurfaceFlinger::readPersistentProperties() {
@@ -2290,7 +2293,7 @@ bool SurfaceFlinger::updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs,
     bool newDataLatched = false;
     if (!mLegacyFrontEndEnabled) {
         ATRACE_NAME("DisplayCallbackAndStatsUpdates");
-        applyTransactions(update.transactions, vsyncId);
+        mustComposite |= applyTransactions(update.transactions, vsyncId);
         traverseLegacyLayers([&](Layer* layer) { layer->commitTransaction(); });
         const nsecs_t latchTime = systemTime();
         bool unused = false;
@@ -2305,11 +2308,22 @@ bool SurfaceFlinger::updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs,
                 mLegacyLayers[bgColorLayer->sequence] = bgColorLayer;
             }
             const bool willReleaseBufferOnLatch = layer->willReleaseBufferOnLatch();
-            if (!layer->hasReadyFrame() && !willReleaseBufferOnLatch) continue;
 
             auto it = mLegacyLayers.find(layer->id);
             LOG_ALWAYS_FATAL_IF(it == mLegacyLayers.end(), "Couldnt find layer object for %s",
                                 layer->getDebugString().c_str());
+            if (!layer->hasReadyFrame() && !willReleaseBufferOnLatch) {
+                if (!it->second->hasBuffer()) {
+                    // The last latch time is used to classify a missed frame as buffer stuffing
+                    // instead of a missed frame. This is used to identify scenarios where we
+                    // could not latch a buffer or apply a transaction due to backpressure.
+                    // We only update the latch time for buffer less layers here, the latch time
+                    // is updated for buffer layers when the buffer is latched.
+                    it->second->updateLastLatchTime(latchTime);
+                }
+                continue;
+            }
+
             const bool bgColorOnly =
                     !layer->externalTexture && (layer->bgColorLayerId != UNASSIGNED_LAYER_ID);
             if (willReleaseBufferOnLatch) {
@@ -2617,6 +2631,28 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
 
     constexpr bool kCursorOnly = false;
     const auto layers = moveSnapshotsToCompositionArgs(refreshArgs, kCursorOnly);
+
+    if (mLayerLifecycleManagerEnabled && !mVisibleRegionsDirty) {
+        for (const auto& [token, display] : FTL_FAKE_GUARD(mStateLock, mDisplays)) {
+            auto compositionDisplay = display->getCompositionDisplay();
+            if (!compositionDisplay->getState().isEnabled) continue;
+            for (auto outputLayer : compositionDisplay->getOutputLayersOrderedByZ()) {
+                if (outputLayer->getLayerFE().getCompositionState() == nullptr) {
+                    // This is unexpected but instead of crashing, capture traces to disk
+                    // and recover gracefully by forcing CE to rebuild layer stack.
+                    ALOGE("Output layer %s for display %s %" PRIu64 " has a null "
+                          "snapshot. Forcing mVisibleRegionsDirty",
+                          outputLayer->getLayerFE().getDebugName(),
+                          compositionDisplay->getName().c_str(), compositionDisplay->getId().value);
+
+                    TransactionTraceWriter::getInstance().invoke(__func__, /* overwrite= */ false);
+                    mVisibleRegionsDirty = true;
+                    refreshArgs.updatingOutputGeometryThisFrame = mVisibleRegionsDirty;
+                    refreshArgs.updatingGeometryThisFrame = mVisibleRegionsDirty;
+                }
+            }
+        }
+    }
 
     mCompositionEngine->present(refreshArgs);
     moveSnapshotsFromCompositionArgs(refreshArgs, layers);
@@ -5137,9 +5173,15 @@ uint32_t SurfaceFlinger::setClientStateLocked(const FrameTimelineInfo& frameTime
         const auto strategy =
             Layer::FrameRate::convertChangeFrameRateStrategy(s.changeFrameRateStrategy);
 
-        if (layer->setFrameRate(
-                Layer::FrameRate(Fps::fromValue(s.frameRate), compatibility, strategy))) {
-          flags |= eTraversalNeeded;
+        if (layer->setFrameRate(Layer::FrameRate::FrameRateVote(Fps::fromValue(s.frameRate),
+                                                                compatibility, strategy))) {
+            flags |= eTraversalNeeded;
+        }
+    }
+    if (what & layer_state_t::eFrameRateCategoryChanged) {
+        const FrameRateCategory category = Layer::FrameRate::convertCategory(s.frameRateCategory);
+        if (layer->setFrameRateCategory(category)) {
+            flags |= eTraversalNeeded;
         }
     }
     if (what & layer_state_t::eFixedTransformHintChanged) {
@@ -5329,6 +5371,11 @@ uint32_t SurfaceFlinger::updateLayerCallbacksAndStats(const FrameTimelineInfo& f
     }
     if (what & layer_state_t::eDataspaceChanged) {
         if (layer->setDataspace(s.dataspace)) flags |= eTraversalNeeded;
+    }
+    if (what & layer_state_t::eExtendedRangeBrightnessChanged) {
+        if (layer->setExtendedRangeBrightness(s.currentHdrSdrRatio, s.desiredHdrSdrRatio)) {
+            flags |= eTraversalNeeded;
+        }
     }
     if (what & layer_state_t::eBufferChanged) {
         std::optional<ui::Transform::RotationFlags> transformHint = std::nullopt;
@@ -5525,7 +5572,7 @@ void SurfaceFlinger::markLayerPendingRemovalLocked(const sp<Layer>& layer) {
 void SurfaceFlinger::onHandleDestroyed(BBinder* handle, sp<Layer>& layer, uint32_t layerId) {
     {
         std::scoped_lock<std::mutex> lock(mCreatedLayersLock);
-        mDestroyedHandles.emplace_back(layerId);
+        mDestroyedHandles.emplace_back(layerId, layer->getDebugName());
     }
 
     mTransactionHandler.onLayerDestroyed(layerId);
@@ -6541,21 +6588,14 @@ status_t SurfaceFlinger::onTransact(uint32_t code, const Parcel& data, Parcel* r
             case 1001:
                 return NAME_NOT_FOUND;
             case 1002: // Toggle flashing on surface damage.
-                if (const int delay = data.readInt32(); delay > 0) {
-                    mDebugFlashDelay = delay;
-                } else {
-                    mDebugFlashDelay = mDebugFlashDelay ? 0 : 1;
-                }
-                scheduleRepaint();
+                sfdo_setDebugFlash(data.readInt32());
                 return NO_ERROR;
             case 1004: // Force composite ahead of next VSYNC.
             case 1006:
-                scheduleComposite(FrameHint::kActive);
+                sfdo_scheduleComposite();
                 return NO_ERROR;
             case 1005: { // Force commit ahead of next VSYNC.
-                Mutex::Autolock lock(mStateLock);
-                setTransactionFlags(eTransactionNeeded | eDisplayTransactionNeeded |
-                                    eTraversalNeeded);
+                sfdo_scheduleCommit();
                 return NO_ERROR;
             }
             case 1007: // Unused.
@@ -6800,19 +6840,13 @@ status_t SurfaceFlinger::onTransact(uint32_t code, const Parcel& data, Parcel* r
                 return NO_ERROR;
             }
             case 1034: {
-                auto future = mScheduler->schedule(
-                        [&]() FTL_FAKE_GUARD(mStateLock) FTL_FAKE_GUARD(kMainThreadContext) {
-                            switch (n = data.readInt32()) {
-                                case 0:
-                                case 1:
-                                    enableRefreshRateOverlay(static_cast<bool>(n));
-                                    break;
-                                default:
-                                    reply->writeBool(isRefreshRateOverlayEnabled());
-                            }
-                        });
-
-                future.wait();
+                n = data.readInt32();
+                if (n == 0 || n == 1) {
+                    sfdo_enableRefreshRateOverlay(static_cast<bool>(n));
+                } else {
+                    Mutex::Autolock lock(mStateLock);
+                    reply->writeBool(isRefreshRateOverlayEnabled());
+                }
                 return NO_ERROR;
             }
             case 1035: {
@@ -8740,6 +8774,33 @@ void SurfaceFlinger::addToLayerTracing(bool visibleRegionDirty, TimePoint time, 
                          std::move(hwcDump), &displays);
 }
 
+// sfdo functions
+
+void SurfaceFlinger::sfdo_enableRefreshRateOverlay(bool active) {
+    auto future = mScheduler->schedule(
+            [&]() FTL_FAKE_GUARD(mStateLock)
+                    FTL_FAKE_GUARD(kMainThreadContext) { enableRefreshRateOverlay(active); });
+    future.wait();
+}
+
+void SurfaceFlinger::sfdo_setDebugFlash(int delay) {
+    if (delay > 0) {
+        mDebugFlashDelay = delay;
+    } else {
+        mDebugFlashDelay = mDebugFlashDelay ? 0 : 1;
+    }
+    scheduleRepaint();
+}
+
+void SurfaceFlinger::sfdo_scheduleComposite() {
+    scheduleComposite(SurfaceFlinger::FrameHint::kActive);
+}
+
+void SurfaceFlinger::sfdo_scheduleCommit() {
+    Mutex::Autolock lock(mStateLock);
+    setTransactionFlags(eTransactionNeeded | eDisplayTransactionNeeded | eTraversalNeeded);
+}
+
 // gui::ISurfaceComposer
 
 binder::Status SurfaceComposerAIDL::bootFinished() {
@@ -9431,6 +9492,26 @@ binder::Status SurfaceComposerAIDL::setOverrideFrameRate(int32_t uid, float fram
         status = PERMISSION_DENIED;
     }
     return binderStatusFromStatusT(status);
+}
+
+binder::Status SurfaceComposerAIDL::enableRefreshRateOverlay(bool active) {
+    mFlinger->sfdo_enableRefreshRateOverlay(active);
+    return binder::Status::ok();
+}
+
+binder::Status SurfaceComposerAIDL::setDebugFlash(int delay) {
+    mFlinger->sfdo_setDebugFlash(delay);
+    return binder::Status::ok();
+}
+
+binder::Status SurfaceComposerAIDL::scheduleComposite() {
+    mFlinger->sfdo_scheduleComposite();
+    return binder::Status::ok();
+}
+
+binder::Status SurfaceComposerAIDL::scheduleCommit() {
+    mFlinger->sfdo_scheduleCommit();
+    return binder::Status::ok();
 }
 
 binder::Status SurfaceComposerAIDL::getGpuContextPriority(int32_t* outPriority) {

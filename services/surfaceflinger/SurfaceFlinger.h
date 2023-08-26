@@ -1134,7 +1134,7 @@ private:
     ui::Rotation getPhysicalDisplayOrientation(DisplayId, bool isPrimary) const
             REQUIRES(mStateLock);
     void traverseLegacyLayers(const LayerVector::Visitor& visitor) const;
-
+    void initTransactionTraceWriter();
     sp<StartPropertySetThread> mStartPropertySetThread;
     surfaceflinger::Factory& mFactory;
     pid_t mPid;
@@ -1425,7 +1425,7 @@ private:
     frontend::LayerHierarchyBuilder mLayerHierarchyBuilder{{}};
     frontend::LayerSnapshotBuilder mLayerSnapshotBuilder;
 
-    std::vector<uint32_t> mDestroyedHandles;
+    std::vector<std::pair<uint32_t, std::string>> mDestroyedHandles;
     std::vector<std::unique_ptr<frontend::RequestedLayerState>> mNewLayers;
     std::vector<LayerCreationArgs> mNewLayerArgs;
     // These classes do not store any client state but help with managing transaction callbacks
@@ -1442,6 +1442,11 @@ private:
     // Mirroring
     // Map of displayid to mirrorRoot
     ftl::SmallMap<int64_t, sp<SurfaceControl>, 3> mMirrorMapForDebug;
+
+    void sfdo_enableRefreshRateOverlay(bool active);
+    void sfdo_setDebugFlash(int delay);
+    void sfdo_scheduleComposite();
+    void sfdo_scheduleCommit();
 };
 
 class SurfaceComposerAIDL : public gui::BnSurfaceComposer {
@@ -1548,6 +1553,10 @@ public:
             const sp<IBinder>& displayToken,
             std::optional<gui::DisplayDecorationSupport>* outSupport) override;
     binder::Status setOverrideFrameRate(int32_t uid, float frameRate) override;
+    binder::Status enableRefreshRateOverlay(bool active) override;
+    binder::Status setDebugFlash(int delay) override;
+    binder::Status scheduleComposite() override;
+    binder::Status scheduleCommit() override;
     binder::Status getGpuContextPriority(int32_t* outPriority) override;
     binder::Status getMaxAcquiredBufferCount(int32_t* buffers) override;
     binder::Status addWindowInfosListener(const sp<gui::IWindowInfosListener>& windowInfosListener,

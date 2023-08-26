@@ -181,7 +181,7 @@ struct layer_state_t {
         eRelativeLayerChanged = 0x00004000,
         eReparent = 0x00008000,
         eColorChanged = 0x00010000,
-        /* unused = 0x00020000, */
+        eFrameRateCategoryChanged = 0x00020000,
         eBufferTransformChanged = 0x00040000,
         eTransformToDisplayInverseChanged = 0x00080000,
         eCropChanged = 0x00100000,
@@ -213,7 +213,6 @@ struct layer_state_t {
         eTrustedOverlayChanged = 0x4000'00000000,
         eDropInputModeChanged = 0x8000'00000000,
         eExtendedRangeBrightnessChanged = 0x10000'00000000,
-
     };
 
     layer_state_t();
@@ -265,6 +264,7 @@ struct layer_state_t {
     // Changes affecting child states.
     static constexpr uint64_t AFFECTS_CHILDREN = layer_state_t::GEOMETRY_CHANGES |
             layer_state_t::HIERARCHY_CHANGES | layer_state_t::eAlphaChanged |
+            layer_state_t::eBackgroundBlurRadiusChanged | layer_state_t::eBlurRegionsChanged |
             layer_state_t::eColorTransformChanged | layer_state_t::eCornerRadiusChanged |
             layer_state_t::eFlagsChanged | layer_state_t::eTrustedOverlayChanged |
             layer_state_t::eFrameRateChanged | layer_state_t::eFrameRateSelectionPriority |
@@ -357,6 +357,9 @@ struct layer_state_t {
 
     // Default frame rate compatibility used to set the layer refresh rate votetype.
     int8_t defaultFrameRateCompatibility;
+
+    // Frame rate category to suggest what frame rate range a surface should run.
+    int8_t frameRateCategory;
 
     // Set by window manager indicating the layer and all its children are
     // in a different orientation than the display. The hint suggests that
