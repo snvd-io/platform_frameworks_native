@@ -113,6 +113,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include <common/FlagManager.h>
 #include <gui/LayerStatePermissions.h>
 #include <gui/SchedulingPolicy.h>
 #include <ui/DisplayIdentification.h>
@@ -129,7 +130,6 @@
 #include "DisplayHardware/VirtualDisplaySurface.h"
 #include "DisplayRenderArea.h"
 #include "Effects/Daltonizer.h"
-#include "FlagManager.h"
 #include "FpsReporter.h"
 #include "FrameTimeline/FrameTimeline.h"
 #include "FrameTracer/FrameTracer.h"
@@ -875,7 +875,7 @@ void SurfaceFlinger::init() FTL_FAKE_GUARD(kMainThreadContext) {
         mRenderEnginePrimeCacheFuture = getRenderEngine().primeCache(shouldPrimeUltraHDR);
 
         if (setSchedFifo(true) != NO_ERROR) {
-            ALOGW("Can't set SCHED_OTHER for primeCache");
+            ALOGW("Can't set SCHED_FIFO after primeCache");
         }
     }
 
@@ -6769,8 +6769,7 @@ status_t SurfaceFlinger::onTransact(uint32_t code, const Parcel& data, Parcel* r
             case 1007: // Unused.
                 return NAME_NOT_FOUND;
             case 1008: // Toggle forced GPU composition.
-                mDebugDisableHWC = data.readInt32() != 0;
-                scheduleRepaint();
+                sfdo_forceClientComposition(data.readInt32() != 0);
                 return NO_ERROR;
             case 1009: // Toggle use of transform hint.
                 mDebugDisableTransformHint = data.readInt32() != 0;
@@ -9059,6 +9058,11 @@ void SurfaceFlinger::sfdo_scheduleCommit() {
     setTransactionFlags(eTransactionNeeded | eDisplayTransactionNeeded | eTraversalNeeded);
 }
 
+void SurfaceFlinger::sfdo_forceClientComposition(bool enabled) {
+    mDebugDisableHWC = enabled;
+    scheduleRepaint();
+}
+
 // gui::ISurfaceComposer
 
 binder::Status SurfaceComposerAIDL::bootFinished() {
@@ -9774,6 +9778,11 @@ binder::Status SurfaceComposerAIDL::scheduleComposite() {
 
 binder::Status SurfaceComposerAIDL::scheduleCommit() {
     mFlinger->sfdo_scheduleCommit();
+    return binder::Status::ok();
+}
+
+binder::Status SurfaceComposerAIDL::forceClientComposition(bool enabled) {
+    mFlinger->sfdo_forceClientComposition(enabled);
     return binder::Status::ok();
 }
 

@@ -63,13 +63,13 @@
 #include <scheduler/interface/ICompositor.h>
 #include <ui/FenceResult.h>
 
+#include <common/FlagManager.h>
 #include "Display/PhysicalDisplay.h"
 #include "DisplayDevice.h"
 #include "DisplayHardware/HWC2.h"
 #include "DisplayHardware/PowerAdvisor.h"
 #include "DisplayIdGenerator.h"
 #include "Effects/Daltonizer.h"
-#include "FlagManager.h"
 #include "FrontEnd/DisplayInfo.h"
 #include "FrontEnd/LayerCreationArgs.h"
 #include "FrontEnd/LayerLifecycleManager.h"
@@ -1462,6 +1462,7 @@ private:
     void sfdo_setDebugFlash(int delay);
     void sfdo_scheduleComposite();
     void sfdo_scheduleCommit();
+    void sfdo_forceClientComposition(bool enabled);
 };
 
 class SurfaceComposerAIDL : public gui::BnSurfaceComposer {
@@ -1572,6 +1573,7 @@ public:
     binder::Status setDebugFlash(int delay) override;
     binder::Status scheduleComposite() override;
     binder::Status scheduleCommit() override;
+    binder::Status forceClientComposition(bool enabled) override;
     binder::Status updateSmallAreaDetection(const std::vector<int32_t>& appIds,
                                             const std::vector<float>& thresholds) override;
     binder::Status setSmallAreaDetectionThreshold(int32_t appId, float threshold) override;
