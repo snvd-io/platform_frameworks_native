@@ -4832,101 +4832,6 @@ TransactionHandler::TransactionReadiness SurfaceFlinger::transactionReadyTimelin
     return TransactionReadiness::Ready;
 }
 
-TransactionHandler::TransactionReadiness SurfaceFlinger::transactionReadyBufferCheckLegacy(
-        const TransactionHandler::TransactionFlushState& flushState) {
-    using TransactionReadiness = TransactionHandler::TransactionReadiness;
-    auto ready = TransactionReadiness::Ready;
-    flushState.transaction->traverseStatesWithBuffersWhileTrue([&](const ResolvedComposerState&
-                                                                           resolvedState) -> bool {
-        sp<Layer> layer = LayerHandle::getLayer(resolvedState.state.surface);
-
-        const auto& transaction = *flushState.transaction;
-        const auto& s = resolvedState.state;
-        // check for barrier frames
-        if (s.bufferData->hasBarrier) {
-            // The current producerId is already a newer producer than the buffer that has a
-            // barrier. This means the incoming buffer is older and we can release it here. We
-            // don't wait on the barrier since we know that's stale information.
-            if (layer->getDrawingState().barrierProducerId > s.bufferData->producerId) {
-                layer->callReleaseBufferCallback(s.bufferData->releaseBufferListener,
-                                                 resolvedState.externalTexture->getBuffer(),
-                                                 s.bufferData->frameNumber,
-                                                 s.bufferData->acquireFence);
-                // Delete the entire state at this point and not just release the buffer because
-                // everything associated with the Layer in this Transaction is now out of date.
-                SFTRACE_FORMAT("DeleteStaleBuffer %s barrierProducerId:%d > %d",
-                               layer->getDebugName(), layer->getDrawingState().barrierProducerId,
-                               s.bufferData->producerId);
-                return TraverseBuffersReturnValues::DELETE_AND_CONTINUE_TRAVERSAL;
-            }
-
-            if (layer->getDrawingState().barrierFrameNumber < s.bufferData->barrierFrameNumber) {
-                const bool willApplyBarrierFrame =
-                        flushState.bufferLayersReadyToPresent.contains(s.surface.get()) &&
-                        ((flushState.bufferLayersReadyToPresent.get(s.surface.get()) >=
-                          s.bufferData->barrierFrameNumber));
-                if (!willApplyBarrierFrame) {
-                    SFTRACE_FORMAT("NotReadyBarrier %s barrierFrameNumber:%" PRId64 " > %" PRId64,
-                                   layer->getDebugName(),
-                                   layer->getDrawingState().barrierFrameNumber,
-                                   s.bufferData->barrierFrameNumber);
-                    ready = TransactionReadiness::NotReadyBarrier;
-                    return TraverseBuffersReturnValues::STOP_TRAVERSAL;
-                }
-            }
-        }
-
-        // If backpressure is enabled and we already have a buffer to commit, keep
-        // the transaction in the queue.
-        const bool hasPendingBuffer =
-                flushState.bufferLayersReadyToPresent.contains(s.surface.get());
-        if (layer->backpressureEnabled() && hasPendingBuffer && transaction.isAutoTimestamp) {
-            SFTRACE_FORMAT("hasPendingBuffer %s", layer->getDebugName());
-            ready = TransactionReadiness::NotReady;
-            return TraverseBuffersReturnValues::STOP_TRAVERSAL;
-        }
-
-        const bool acquireFenceAvailable = s.bufferData &&
-                s.bufferData->flags.test(BufferData::BufferDataChange::fenceChanged) &&
-                s.bufferData->acquireFence;
-        const bool fenceSignaled = !acquireFenceAvailable ||
-                s.bufferData->acquireFence->getStatus() != Fence::Status::Unsignaled;
-        if (!fenceSignaled) {
-            // check fence status
-            const bool allowLatchUnsignaled = shouldLatchUnsignaled(s, transaction.states.size(),
-                                                                    flushState.firstTransaction) &&
-                    layer->isSimpleBufferUpdate(s);
-
-            if (allowLatchUnsignaled) {
-                SFTRACE_FORMAT("fence unsignaled try allowLatchUnsignaled %s",
-                               layer->getDebugName());
-                ready = TransactionReadiness::NotReadyUnsignaled;
-            } else {
-                ready = TransactionReadiness::NotReady;
-                auto& listener = s.bufferData->releaseBufferListener;
-                if (listener &&
-                    (flushState.queueProcessTime - transaction.postTime) >
-                            std::chrono::nanoseconds(4s).count()) {
-                    // Used to add a stalled transaction which uses an internal lock.
-                    ftl::FakeGuard guard(kMainThreadContext);
-                    mTransactionHandler
-                            .onTransactionQueueStalled(transaction.id,
-                                                       {.pid = layer->getOwnerPid(),
-                                                        .layerId = static_cast<uint32_t>(
-                                                                layer->getSequence()),
-                                                        .layerName = layer->getDebugName(),
-                                                        .bufferId = s.bufferData->getId(),
-                                                        .frameNumber = s.bufferData->frameNumber});
-                }
-                SFTRACE_FORMAT("fence unsignaled %s", layer->getDebugName());
-                return TraverseBuffersReturnValues::STOP_TRAVERSAL;
-            }
-        }
-        return TraverseBuffersReturnValues::CONTINUE_TRAVERSAL;
-    });
-    return ready;
-}
-
 TransactionHandler::TransactionReadiness SurfaceFlinger::transactionReadyBufferCheck(
         const TransactionHandler::TransactionFlushState& flushState) {
     using TransactionReadiness = TransactionHandler::TransactionReadiness;
@@ -6723,23 +6628,6 @@ void SurfaceFlinger::dumpOffscreenLayers(std::string& result) {
 
     result.append("Offscreen Layers:\n");
     result.append(future.get());
-}
-
-void SurfaceFlinger::dumpHwcLayersMinidumpLockedLegacy(std::string& result) const {
-    for (const auto& [token, display] : FTL_FAKE_GUARD(mStateLock, mDisplays)) {
-        const auto displayId = HalDisplayId::tryCast(display->getId());
-        if (!displayId) {
-            continue;
-        }
-
-        StringAppendF(&result, "Display %s (%s) HWC layers:\n", to_string(*displayId).c_str(),
-                      displayId == mActiveDisplayId ? "active" : "inactive");
-        Layer::miniDumpHeader(result);
-
-        const DisplayDevice& ref = *display;
-        mDrawingState.traverseInZOrder([&](Layer* layer) { layer->miniDumpLegacy(result, ref); });
-        result.append("\n");
-    }
 }
 
 void SurfaceFlinger::dumpHwcLayersMinidump(std::string& result) const {
@@ -8563,42 +8451,6 @@ void SurfaceFlinger::State::traverseInZOrder(const LayerVector::Visitor& visitor
 
 void SurfaceFlinger::State::traverseInReverseZOrder(const LayerVector::Visitor& visitor) const {
     layersSortedByZ.traverseInReverseZOrder(stateSet, visitor);
-}
-
-void SurfaceFlinger::traverseLayersInLayerStack(ui::LayerStack layerStack, const int32_t uid,
-                                                std::unordered_set<uint32_t> excludeLayerIds,
-                                                const LayerVector::Visitor& visitor) {
-    // We loop through the first level of layers without traversing,
-    // as we need to determine which layers belong to the requested display.
-    for (const auto& layer : mDrawingState.layersSortedByZ) {
-        if (layer->getLayerStack() != layerStack) {
-            continue;
-        }
-        // relative layers are traversed in Layer::traverseInZOrder
-        layer->traverseInZOrder(LayerVector::StateSet::Drawing, [&](Layer* layer) {
-            if (layer->isInternalDisplayOverlay()) {
-                return;
-            }
-            if (!layer->isVisible()) {
-                return;
-            }
-            if (uid != CaptureArgs::UNSET_UID && layer->getOwnerUid() != uid) {
-                return;
-            }
-
-            if (!excludeLayerIds.empty()) {
-                auto p = sp<Layer>::fromExisting(layer);
-                while (p != nullptr) {
-                    if (excludeLayerIds.count(p->sequence) != 0) {
-                        return;
-                    }
-                    p = p->getParent();
-                }
-            }
-
-            visitor(layer);
-        });
-    }
 }
 
 ftl::Optional<scheduler::FrameRateMode> SurfaceFlinger::getPreferredDisplayMode(
