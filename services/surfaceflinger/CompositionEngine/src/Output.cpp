@@ -474,8 +474,9 @@ ftl::Future<std::monostate> Output::present(
     devOptRepaintFlash(refreshArgs);
     finishFrame(std::move(result));
     ftl::Future<std::monostate> future;
+    const bool flushEvenWhenDisabled = !refreshArgs.bufferIdsToUncache.empty();
     if (mOffloadPresent) {
-        future = presentFrameAndReleaseLayersAsync();
+        future = presentFrameAndReleaseLayersAsync(flushEvenWhenDisabled);
 
         // Only offload for this frame. The next frame will determine whether it
         // needs to be offloaded. Leave the HwcAsyncWorker in place. For one thing,
@@ -483,7 +484,7 @@ ftl::Future<std::monostate> Output::present(
         // we don't want to churn.
         mOffloadPresent = false;
     } else {
-        presentFrameAndReleaseLayers();
+        presentFrameAndReleaseLayers(flushEvenWhenDisabled);
         future = ftl::yield<std::monostate>({});
     }
     renderCachedSets(refreshArgs);
@@ -1133,9 +1134,9 @@ void Output::prepareFrame() {
     finishPrepareFrame();
 }
 
-ftl::Future<std::monostate> Output::presentFrameAndReleaseLayersAsync() {
+ftl::Future<std::monostate> Output::presentFrameAndReleaseLayersAsync(bool flushEvenWhenDisabled) {
     return ftl::Future<bool>(std::move(mHwComposerAsyncWorker->send([&]() {
-               presentFrameAndReleaseLayers();
+               presentFrameAndReleaseLayers(flushEvenWhenDisabled);
                return true;
            })))
             .then([](bool) { return std::monostate{}; });
@@ -1210,7 +1211,8 @@ void Output::devOptRepaintFlash(const compositionengine::CompositionRefreshArgs&
         }
     }
 
-    presentFrameAndReleaseLayers();
+    constexpr bool kFlushEvenWhenDisabled = false;
+    presentFrameAndReleaseLayers(kFlushEvenWhenDisabled);
 
     std::this_thread::sleep_for(*refreshArgs.devOptFlashDirtyRegionsDelay);
 
@@ -1584,11 +1586,16 @@ bool Output::isPowerHintSessionEnabled() {
     return false;
 }
 
-void Output::presentFrameAndReleaseLayers() {
+void Output::presentFrameAndReleaseLayers(bool flushEvenWhenDisabled) {
     ATRACE_FORMAT("%s for %s", __func__, mNamePlusId.c_str());
     ALOGV(__FUNCTION__);
 
     if (!getState().isEnabled) {
+        if (flushEvenWhenDisabled && FlagManager::getInstance().flush_buffer_slots_to_uncache()) {
+            // Some commands, like clearing buffer slots, should still be executed
+            // even if the display is not enabled.
+            executeCommands();
+        }
         return;
     }
 
