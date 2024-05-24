@@ -767,41 +767,6 @@ bool Layer::isSecure() const {
     return (p != nullptr) ? p->isSecure() : false;
 }
 
-void Layer::transferAvailableJankData(const std::deque<sp<CallbackHandle>>& handles,
-                                      std::vector<JankData>& jankData) {
-    if (mPendingJankClassifications.empty() ||
-        !mPendingJankClassifications.front()->getJankType()) {
-        return;
-    }
-
-    bool includeJankData = false;
-    for (const auto& handle : handles) {
-        for (const auto& cb : handle->callbackIds) {
-            if (cb.includeJankData) {
-                includeJankData = true;
-                break;
-            }
-        }
-
-        if (includeJankData) {
-            jankData.reserve(mPendingJankClassifications.size());
-            break;
-        }
-    }
-
-    while (!mPendingJankClassifications.empty() &&
-           mPendingJankClassifications.front()->getJankType()) {
-        if (includeJankData) {
-            std::shared_ptr<frametimeline::SurfaceFrame> surfaceFrame =
-                    mPendingJankClassifications.front();
-            jankData.emplace_back(JankData(surfaceFrame->getToken(),
-                                           surfaceFrame->getJankType().value(),
-                                           surfaceFrame->getRenderRate().getPeriodNsecs()));
-        }
-        mPendingJankClassifications.pop_front();
-    }
-}
-
 // ----------------------------------------------------------------------------
 // transaction
 // ----------------------------------------------------------------------------
@@ -1436,7 +1401,6 @@ std::shared_ptr<frametimeline::SurfaceFrame> Layer::createSurfaceFrameForTransac
     if (fps) {
         surfaceFrame->setRenderRate(*fps);
     }
-    onSurfaceFrameCreated(surfaceFrame);
     return surfaceFrame;
 }
 
@@ -1453,7 +1417,6 @@ std::shared_ptr<frametimeline::SurfaceFrame> Layer::createSurfaceFrameForBuffer(
     if (fps) {
         surfaceFrame->setRenderRate(*fps);
     }
-    onSurfaceFrameCreated(surfaceFrame);
     return surfaceFrame;
 }
 
@@ -1479,7 +1442,6 @@ void Layer::setFrameTimelineVsyncForSkippedFrames(const FrameTimelineInfo& info,
     if (fps) {
         surfaceFrame->setRenderRate(*fps);
     }
-    onSurfaceFrameCreated(surfaceFrame);
     addSurfaceFrameDroppedForBuffer(surfaceFrame, postTime);
 }
 
@@ -2942,25 +2904,6 @@ void Layer::onLayerDisplayed(ftl::SharedFuture<FenceResult> futureFenceResult,
     }
 }
 
-void Layer::onSurfaceFrameCreated(
-        const std::shared_ptr<frametimeline::SurfaceFrame>& surfaceFrame) {
-    while (mPendingJankClassifications.size() >= kPendingClassificationMaxSurfaceFrames) {
-        // Too many SurfaceFrames pending classification. The front of the deque is probably not
-        // tracked by FrameTimeline and will never be presented. This will only result in a memory
-        // leak.
-        if (hasBufferOrSidebandStreamInDrawing()) {
-            // Only log for layers with a buffer, since we expect the jank data to be drained for
-            // these, while there may be no jank listeners for bufferless layers.
-            ALOGW("Removing the front of pending jank deque from layer - %s to prevent memory leak",
-                  mName.c_str());
-            std::string miniDump = mPendingJankClassifications.front()->miniDump();
-            ALOGD("Head SurfaceFrame mini dump\n%s", miniDump.c_str());
-        }
-        mPendingJankClassifications.pop_front();
-    }
-    mPendingJankClassifications.emplace_back(surfaceFrame);
-}
-
 void Layer::releasePendingBuffer(nsecs_t dequeueReadyTime) {
     for (const auto& handle : mDrawingState.callbackHandles) {
         handle->transformHint = mTransformHint;
@@ -2978,10 +2921,7 @@ void Layer::releasePendingBuffer(nsecs_t dequeueReadyTime) {
         }
     }
 
-    std::vector<JankData> jankData;
-    transferAvailableJankData(mDrawingState.callbackHandles, jankData);
-    mFlinger->getTransactionCallbackInvoker().addCallbackHandles(mDrawingState.callbackHandles,
-                                                                 jankData);
+    mFlinger->getTransactionCallbackInvoker().addCallbackHandles(mDrawingState.callbackHandles);
     mDrawingState.callbackHandles = {};
 }
 
@@ -3449,9 +3389,7 @@ bool Layer::setTransactionCompletedListeners(const std::vector<sp<CallbackHandle
     if (!remainingHandles.empty()) {
         // Notify the transaction completed threads these handles are done. These are only the
         // handles that were not added to the mDrawingState, which will be notified later.
-        std::vector<JankData> jankData;
-        transferAvailableJankData(remainingHandles, jankData);
-        mFlinger->getTransactionCallbackInvoker().addCallbackHandles(remainingHandles, jankData);
+        mFlinger->getTransactionCallbackInvoker().addCallbackHandles(remainingHandles);
     }
 
     mReleasePreviousBuffer = false;

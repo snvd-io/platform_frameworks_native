@@ -143,6 +143,7 @@
 #include "FrontEnd/LayerLog.h"
 #include "FrontEnd/LayerSnapshot.h"
 #include "HdrLayerInfoReporter.h"
+#include "Jank/JankTracker.h"
 #include "Layer.h"
 #include "LayerProtoHelper.h"
 #include "LayerRenderArea.h"
@@ -5507,10 +5508,8 @@ uint32_t SurfaceFlinger::setClientStateLocked(const FrameTimelineInfo& frameTime
     }
     if (layer == nullptr) {
         for (auto& [listener, callbackIds] : s.listeners) {
-            mTransactionCallbackInvoker.addCallbackHandle(sp<CallbackHandle>::make(listener,
-                                                                                   callbackIds,
-                                                                                   s.surface),
-                                                          std::vector<JankData>());
+            mTransactionCallbackInvoker.addCallbackHandle(
+                    sp<CallbackHandle>::make(listener, callbackIds, s.surface));
         }
         return 0;
     }
@@ -5868,10 +5867,8 @@ uint32_t SurfaceFlinger::updateLayerCallbacksAndStats(const FrameTimelineInfo& f
     }
     if (layer == nullptr) {
         for (auto& [listener, callbackIds] : s.listeners) {
-            mTransactionCallbackInvoker.addCallbackHandle(sp<CallbackHandle>::make(listener,
-                                                                                   callbackIds,
-                                                                                   s.surface),
-                                                          std::vector<JankData>());
+            mTransactionCallbackInvoker.addCallbackHandle(
+                    sp<CallbackHandle>::make(listener, callbackIds, s.surface));
         }
         return 0;
     }
@@ -6113,6 +6110,8 @@ void SurfaceFlinger::onHandleDestroyed(BBinder* handle, sp<Layer>& layer, uint32
         ftl::FakeGuard guard(kMainThreadContext);
         mTransactionHandler.onLayerDestroyed(layerId);
     }
+
+    JankTracker::flushJankData(layerId);
 
     Mutex::Autolock lock(mStateLock);
     markLayerPendingRemovalLocked(layer);
@@ -10461,6 +10460,28 @@ binder::Status SurfaceComposerAIDL::getSchedulingPolicy(gui::SchedulingPolicy* o
 binder::Status SurfaceComposerAIDL::notifyShutdown() {
     TransactionTraceWriter::getInstance().invoke("systemShutdown_", /* overwrite= */ false);
     return ::android::binder::Status::ok();
+}
+
+binder::Status SurfaceComposerAIDL::addJankListener(const sp<IBinder>& layerHandle,
+                                                    const sp<gui::IJankListener>& listener) {
+    sp<Layer> layer = LayerHandle::getLayer(layerHandle);
+    if (layer == nullptr) {
+        return binder::Status::fromExceptionCode(binder::Status::EX_NULL_POINTER);
+    }
+    JankTracker::addJankListener(layer->sequence, IInterface::asBinder(listener));
+    return binder::Status::ok();
+}
+
+binder::Status SurfaceComposerAIDL::flushJankData(int32_t layerId) {
+    JankTracker::flushJankData(layerId);
+    return binder::Status::ok();
+}
+
+binder::Status SurfaceComposerAIDL::removeJankListener(int32_t layerId,
+                                                       const sp<gui::IJankListener>& listener,
+                                                       int64_t afterVsync) {
+    JankTracker::removeJankListener(layerId, IInterface::asBinder(listener), afterVsync);
+    return binder::Status::ok();
 }
 
 status_t SurfaceComposerAIDL::checkAccessPermission(bool usePermissionCache) {

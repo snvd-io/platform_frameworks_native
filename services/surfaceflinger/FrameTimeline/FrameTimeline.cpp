@@ -30,6 +30,8 @@
 #include <numeric>
 #include <unordered_set>
 
+#include "../Jank/JankTracker.h"
+
 namespace android::frametimeline {
 
 using base::StringAppendF;
@@ -685,6 +687,13 @@ void SurfaceFrame::onPresent(nsecs_t presentTime, int32_t displayFrameJankType, 
         mTimeStats->incrementJankyFrames({refreshRate, mRenderRate, mOwnerUid, mLayerName,
                                           mGameMode, mJankType, displayDeadlineDelta,
                                           displayPresentDelta, deadlineDelta});
+
+        gui::JankData jd;
+        jd.frameVsyncId = mToken;
+        jd.jankType = mJankType;
+        jd.frameIntervalNs =
+                (mRenderRate ? *mRenderRate : mDisplayFrameRenderRate).getPeriodNsecs();
+        JankTracker::onJankData(mLayerId, jd);
     }
 }
 

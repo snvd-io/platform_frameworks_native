@@ -27,6 +27,7 @@
 #include <android/gui/BnSurfaceComposer.h>
 #include <android/gui/DisplayStatInfo.h>
 #include <android/gui/DisplayState.h>
+#include <android/gui/IJankListener.h>
 #include <android/gui/ISurfaceComposerClient.h>
 #include <cutils/atomic.h>
 #include <cutils/compiler.h>
@@ -1693,6 +1694,11 @@ public:
             int pid, std::optional<gui::StalledTransactionInfo>* outInfo) override;
     binder::Status getSchedulingPolicy(gui::SchedulingPolicy* outPolicy) override;
     binder::Status notifyShutdown() override;
+    binder::Status addJankListener(const sp<IBinder>& layer,
+                                   const sp<gui::IJankListener>& listener) override;
+    binder::Status flushJankData(int32_t layerId) override;
+    binder::Status removeJankListener(int32_t layerId, const sp<gui::IJankListener>& listener,
+                                      int64_t afterVsync) override;
 
 private:
     static const constexpr bool kUsePermissionCache = true;
