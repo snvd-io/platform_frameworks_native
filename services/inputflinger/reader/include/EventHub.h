@@ -21,6 +21,7 @@
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <unordered_map>
@@ -278,8 +279,8 @@ public:
      */
     virtual std::optional<PropertyMap> getConfiguration(int32_t deviceId) const = 0;
 
-    virtual status_t getAbsoluteAxisInfo(int32_t deviceId, int axis,
-                                         RawAbsoluteAxisInfo* outAxisInfo) const = 0;
+    virtual std::optional<RawAbsoluteAxisInfo> getAbsoluteAxisInfo(int32_t deviceId,
+                                                                   int axis) const = 0;
 
     virtual bool hasRelativeAxis(int32_t deviceId, int axis) const = 0;
 
@@ -511,8 +512,8 @@ public:
 
     std::optional<PropertyMap> getConfiguration(int32_t deviceId) const override final;
 
-    status_t getAbsoluteAxisInfo(int32_t deviceId, int axis,
-                                 RawAbsoluteAxisInfo* outAxisInfo) const override final;
+    std::optional<RawAbsoluteAxisInfo> getAbsoluteAxisInfo(int32_t deviceId,
+                                                           int axis) const override final;
 
     bool hasRelativeAxis(int32_t deviceId, int axis) const override final;
 

@@ -16,6 +16,8 @@
 
 #include "FakeEventHub.h"
 
+#include <optional>
+
 #include <android-base/thread_annotations.h>
 #include <gtest/gtest.h>
 #include <linux/input-event-codes.h>
@@ -263,18 +265,16 @@ std::optional<PropertyMap> FakeEventHub::getConfiguration(int32_t deviceId) cons
     return device->configuration;
 }
 
-status_t FakeEventHub::getAbsoluteAxisInfo(int32_t deviceId, int axis,
-                                           RawAbsoluteAxisInfo* outAxisInfo) const {
+std::optional<RawAbsoluteAxisInfo> FakeEventHub::getAbsoluteAxisInfo(int32_t deviceId,
+                                                                     int axis) const {
     Device* device = getDevice(deviceId);
     if (device) {
         ssize_t index = device->absoluteAxes.indexOfKey(axis);
         if (index >= 0) {
-            *outAxisInfo = device->absoluteAxes.valueAt(index);
-            return OK;
+            return device->absoluteAxes.valueAt(index);
         }
     }
-    outAxisInfo->clear();
-    return -1;
+    return std::nullopt;
 }
 
 bool FakeEventHub::hasRelativeAxis(int32_t deviceId, int axis) const {

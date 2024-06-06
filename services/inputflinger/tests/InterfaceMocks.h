@@ -91,8 +91,8 @@ public:
     MOCK_METHOD(InputDeviceIdentifier, getDeviceIdentifier, (int32_t deviceId), (const));
     MOCK_METHOD(int32_t, getDeviceControllerNumber, (int32_t deviceId), (const));
     MOCK_METHOD(std::optional<PropertyMap>, getConfiguration, (int32_t deviceId), (const));
-    MOCK_METHOD(status_t, getAbsoluteAxisInfo,
-                (int32_t deviceId, int axis, RawAbsoluteAxisInfo* outAxisInfo), (const));
+    MOCK_METHOD(std::optional<RawAbsoluteAxisInfo>, getAbsoluteAxisInfo,
+                (int32_t deviceId, int axis), (const));
     MOCK_METHOD(bool, hasRelativeAxis, (int32_t deviceId, int axis), (const));
     MOCK_METHOD(bool, hasInputProperty, (int32_t deviceId, int property), (const));
     MOCK_METHOD(bool, hasMscEvent, (int32_t deviceId, int mscEvent), (const));

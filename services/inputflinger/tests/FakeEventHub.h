@@ -168,8 +168,8 @@ private:
     InputDeviceIdentifier getDeviceIdentifier(int32_t deviceId) const override;
     int32_t getDeviceControllerNumber(int32_t) const override;
     std::optional<PropertyMap> getConfiguration(int32_t deviceId) const override;
-    status_t getAbsoluteAxisInfo(int32_t deviceId, int axis,
-                                 RawAbsoluteAxisInfo* outAxisInfo) const override;
+    std::optional<RawAbsoluteAxisInfo> getAbsoluteAxisInfo(int32_t deviceId,
+                                                           int axis) const override;
     bool hasRelativeAxis(int32_t deviceId, int axis) const override;
     bool hasInputProperty(int32_t, int) const override;
     bool hasMscEvent(int32_t deviceId, int mscEvent) const override final;

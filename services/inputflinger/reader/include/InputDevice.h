@@ -306,9 +306,11 @@ public:
         return mEventHub->getDeviceControllerNumber(mId);
     }
     inline status_t getAbsoluteAxisInfo(int32_t code, RawAbsoluteAxisInfo* axisInfo) const {
-        if (const auto status = mEventHub->getAbsoluteAxisInfo(mId, code, axisInfo); status != OK) {
-            return status;
+        std::optional<RawAbsoluteAxisInfo> info = mEventHub->getAbsoluteAxisInfo(mId, code);
+        if (!info.has_value()) {
+            return NAME_NOT_FOUND;
         }
+        *axisInfo = *info;
 
         // Validate axis info for InputDevice.
         if (axisInfo->valid && axisInfo->minValue == axisInfo->maxValue) {
@@ -432,9 +434,8 @@ public:
     }
 
     inline bool hasAbsoluteAxis(int32_t code) const {
-        RawAbsoluteAxisInfo info;
-        mEventHub->getAbsoluteAxisInfo(mId, code, &info);
-        return info.valid;
+        std::optional<RawAbsoluteAxisInfo> info = mEventHub->getAbsoluteAxisInfo(mId, code);
+        return info.has_value() && info->valid;
     }
     inline bool isKeyPressed(int32_t scanCode) const {
         return mEventHub->getScanCodeState(mId, scanCode) == AKEY_STATE_DOWN;
