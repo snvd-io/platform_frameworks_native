@@ -57,6 +57,11 @@ using LayerHierarchy = surfaceflinger::frontend::LayerHierarchy;
 using LayerHierarchyBuilder = surfaceflinger::frontend::LayerHierarchyBuilder;
 using RequestedLayerState = surfaceflinger::frontend::RequestedLayerState;
 
+class ZeroClock : public Clock {
+public:
+    nsecs_t now() const override { return 0; }
+};
+
 class SchedulerTest : public testing::Test {
 protected:
     class MockEventThreadConnection : public android::EventThreadConnection {
@@ -345,6 +350,9 @@ TEST_F(SchedulerTest, chooseDisplayModesMultipleDisplays) {
                                 std::make_shared<RefreshRateSelector>(kDisplay2Modes,
                                                                       kDisplay2Mode60->getId()));
 
+    mScheduler->setDisplayPowerMode(kDisplayId1, hal::PowerMode::ON);
+    mScheduler->setDisplayPowerMode(kDisplayId2, hal::PowerMode::ON);
+
     using DisplayModeChoice = TestableScheduler::DisplayModeChoice;
     TestableScheduler::DisplayModeChoiceMap expectedChoices;
 
@@ -357,7 +365,7 @@ TEST_F(SchedulerTest, chooseDisplayModesMultipleDisplays) {
                                                   globalSignals)(kDisplayId2,
                                                                  FrameRateMode{60_Hz,
                                                                                kDisplay2Mode60},
-                                                                 globalSignals);
+                                                                 GlobalSignals{});
 
         std::vector<RefreshRateSelector::LayerRequirement> layers = {{.weight = 1.f},
                                                                      {.weight = 1.f}};
@@ -376,7 +384,7 @@ TEST_F(SchedulerTest, chooseDisplayModesMultipleDisplays) {
                                                   globalSignals)(kDisplayId2,
                                                                  FrameRateMode{120_Hz,
                                                                                kDisplay2Mode120},
-                                                                 globalSignals);
+                                                                 GlobalSignals{});
 
         mScheduler->setTouchStateAndIdleTimerPolicy(globalSignals);
 
@@ -395,7 +403,7 @@ TEST_F(SchedulerTest, chooseDisplayModesMultipleDisplays) {
                                                   globalSignals)(kDisplayId2,
                                                                  FrameRateMode{120_Hz,
                                                                                kDisplay2Mode120},
-                                                                 globalSignals);
+                                                                 GlobalSignals{});
 
         const auto actualChoices = mScheduler->chooseDisplayModes();
         EXPECT_EQ(expectedChoices, actualChoices);
@@ -407,6 +415,7 @@ TEST_F(SchedulerTest, chooseDisplayModesMultipleDisplays) {
                 ->registerDisplay(kDisplayId3,
                                   std::make_shared<RefreshRateSelector>(kDisplay3Modes,
                                                                         kDisplay3Mode60->getId()));
+        mScheduler->setDisplayPowerMode(kDisplayId3, hal::PowerMode::ON);
 
         const GlobalSignals globalSignals = {.touch = true};
         mScheduler->replaceTouchTimer(10);
@@ -417,10 +426,10 @@ TEST_F(SchedulerTest, chooseDisplayModesMultipleDisplays) {
                 DisplayModeChoice>(kDisplayId1, FrameRateMode{120_Hz, kDisplay1Mode120},
                                    globalSignals)(kDisplayId2,
                                                   FrameRateMode{120_Hz, kDisplay2Mode120},
-                                                  globalSignals)(kDisplayId3,
-                                                                 FrameRateMode{60_Hz,
-                                                                               kDisplay3Mode60},
-                                                                 globalSignals);
+                                                  GlobalSignals{})(kDisplayId3,
+                                                                   FrameRateMode{60_Hz,
+                                                                                 kDisplay3Mode60},
+                                                                   GlobalSignals{});
 
         const auto actualChoices = mScheduler->chooseDisplayModes();
         EXPECT_EQ(expectedChoices, actualChoices);
@@ -435,12 +444,12 @@ TEST_F(SchedulerTest, chooseDisplayModesMultipleDisplays) {
         expectedChoices = ftl::init::map<
                 const PhysicalDisplayId&,
                 DisplayModeChoice>(kDisplayId1, FrameRateMode{60_Hz, kDisplay1Mode60},
-                                   globalSignals)(kDisplayId2,
-                                                  FrameRateMode{60_Hz, kDisplay2Mode60},
-                                                  globalSignals)(kDisplayId3,
-                                                                 FrameRateMode{60_Hz,
-                                                                               kDisplay3Mode60},
-                                                                 globalSignals);
+                                   GlobalSignals{})(kDisplayId2,
+                                                    FrameRateMode{60_Hz, kDisplay2Mode60},
+                                                    GlobalSignals{})(kDisplayId3,
+                                                                     FrameRateMode{60_Hz,
+                                                                                   kDisplay3Mode60},
+                                                                     globalSignals);
 
         const auto actualChoices = mScheduler->chooseDisplayModes();
         EXPECT_EQ(expectedChoices, actualChoices);
@@ -564,7 +573,7 @@ TEST_F(SchedulerTest, nextFrameIntervalTest) {
                                  hal::VrrConfig{.minFrameIntervalNs = static_cast<int32_t>(
                                                         frameRate.getPeriodNsecs())}));
     std::shared_ptr<VSyncPredictor> vrrTracker =
-            std::make_shared<VSyncPredictor>(std::make_unique<SystemClock>(), kMode, kHistorySize,
+            std::make_shared<VSyncPredictor>(std::make_unique<ZeroClock>(), kMode, kHistorySize,
                                              kMinimumSamplesForPrediction,
                                              kOutlierTolerancePercent);
     std::shared_ptr<RefreshRateSelector> vrrSelectorPtr =
@@ -578,7 +587,7 @@ TEST_F(SchedulerTest, nextFrameIntervalTest) {
 
     scheduler.registerDisplay(kMode->getPhysicalDisplayId(), vrrSelectorPtr, vrrTracker);
     vrrSelectorPtr->setActiveMode(kMode->getId(), frameRate);
-    scheduler.setRenderRate(kMode->getPhysicalDisplayId(), frameRate);
+    scheduler.setRenderRate(kMode->getPhysicalDisplayId(), frameRate, /*applyImmediately*/ false);
     vrrTracker->addVsyncTimestamp(0);
     // Set 1000 as vsync seq #0
     vrrTracker->nextAnticipatedVSyncTimeFrom(700);
@@ -591,23 +600,21 @@ TEST_F(SchedulerTest, nextFrameIntervalTest) {
                                              TimePoint::fromNs(2000)));
 
     // Not crossing the min frame period
+    vrrTracker->onFrameBegin(TimePoint::fromNs(2000), TimePoint::fromNs(1500));
     EXPECT_EQ(Fps::fromPeriodNsecs(1000),
               scheduler.getNextFrameInterval(kMode->getPhysicalDisplayId(),
                                              TimePoint::fromNs(2500)));
     // Change render rate
     frameRate = Fps::fromPeriodNsecs(2000);
     vrrSelectorPtr->setActiveMode(kMode->getId(), frameRate);
-    scheduler.setRenderRate(kMode->getPhysicalDisplayId(), frameRate);
-
-    // Set 2000 as vsync seq #0
-    vrrTracker->nextAnticipatedVSyncTimeFrom(1700);
+    scheduler.setRenderRate(kMode->getPhysicalDisplayId(), frameRate, /*applyImmediately*/ false);
 
     EXPECT_EQ(Fps::fromPeriodNsecs(2000),
               scheduler.getNextFrameInterval(kMode->getPhysicalDisplayId(),
-                                             TimePoint::fromNs(2000)));
+                                             TimePoint::fromNs(5500)));
     EXPECT_EQ(Fps::fromPeriodNsecs(2000),
               scheduler.getNextFrameInterval(kMode->getPhysicalDisplayId(),
-                                             TimePoint::fromNs(4000)));
+                                             TimePoint::fromNs(7500)));
 }
 
 TEST_F(SchedulerTest, resyncAllToHardwareVsync) FTL_FAKE_GUARD(kMainThreadContext) {
