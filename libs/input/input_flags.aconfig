@@ -192,3 +192,12 @@ flag {
   description: "Prevents touchpad gesture changing window focus."
   bug: "364460018"
 }
+
+flag {
+  name: "enable_input_policy_profile"
+  namespace: "input"
+  description: "Apply input policy profile for input threads."
+  bug: "347122505"
+  is_fixed_read_only: true
+}
+
