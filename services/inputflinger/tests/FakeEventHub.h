@@ -187,7 +187,7 @@ private:
     std::optional<RawLayoutInfo> getRawLayoutInfo(int32_t deviceId) const override;
     int32_t getKeyCodeState(int32_t deviceId, int32_t keyCode) const override;
     int32_t getSwitchState(int32_t deviceId, int32_t sw) const override;
-    status_t getAbsoluteAxisValue(int32_t deviceId, int32_t axis, int32_t* outValue) const override;
+    std::optional<int32_t> getAbsoluteAxisValue(int32_t deviceId, int32_t axis) const override;
     int32_t getKeyCodeForKeyLocation(int32_t deviceId, int32_t locationKeyCode) const override;
 
     // Return true if the device has non-empty key layout.

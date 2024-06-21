@@ -131,7 +131,7 @@ public:
     MOCK_METHOD(int32_t, getKeyCodeState, (int32_t deviceId, int32_t keyCode), (const, override));
     MOCK_METHOD(int32_t, getSwitchState, (int32_t deviceId, int32_t sw), (const, override));
 
-    MOCK_METHOD(status_t, getAbsoluteAxisValue, (int32_t deviceId, int32_t axis, int32_t* outValue),
+    MOCK_METHOD(std::optional<int32_t>, getAbsoluteAxisValue, (int32_t deviceId, int32_t axis),
                 (const, override));
     MOCK_METHOD(base::Result<std::vector<int32_t>>, getMtSlotValues,
                 (int32_t deviceId, int32_t axis, size_t slotCount), (const, override));

@@ -381,8 +381,8 @@ public:
         return mEventHub->getKeyCodeForKeyLocation(mId, locationKeyCode);
     }
     inline int32_t getSwitchState(int32_t sw) const { return mEventHub->getSwitchState(mId, sw); }
-    inline status_t getAbsoluteAxisValue(int32_t code, int32_t* outValue) const {
-        return mEventHub->getAbsoluteAxisValue(mId, code, outValue);
+    inline std::optional<int32_t> getAbsoluteAxisValue(int32_t code) const {
+        return mEventHub->getAbsoluteAxisValue(mId, code);
     }
     inline base::Result<std::vector<int32_t>> getMtSlotValues(int32_t axis,
                                                               size_t slotCount) const {
@@ -442,11 +442,6 @@ public:
     }
     inline bool isKeyCodePressed(int32_t keyCode) const {
         return mEventHub->getKeyCodeState(mId, keyCode) == AKEY_STATE_DOWN;
-    }
-    inline int32_t getAbsoluteAxisValue(int32_t code) const {
-        int32_t value;
-        mEventHub->getAbsoluteAxisValue(mId, code, &value);
-        return value;
     }
     inline bool isDeviceEnabled() { return mEventHub->isDeviceEnabled(mId); }
     inline status_t enableDevice() { return mEventHub->enableDevice(mId); }

@@ -208,9 +208,12 @@ public:
     int32_t getKeyCodeForKeyLocation(int32_t deviceId, int32_t locationKeyCode) const override {
         return mFdp->ConsumeIntegral<int32_t>();
     }
-    status_t getAbsoluteAxisValue(int32_t deviceId, int32_t axis,
-                                  int32_t* outValue) const override {
-        return mFdp->ConsumeIntegral<status_t>();
+    std::optional<int32_t> getAbsoluteAxisValue(int32_t deviceId, int32_t axis) const override {
+        if (mFdp->ConsumeBool()) {
+            return mFdp->ConsumeIntegral<int32_t>();
+        } else {
+            return std::nullopt;
+        }
     }
     base::Result<std::vector<int32_t>> getMtSlotValues(int32_t deviceId, int32_t axis,
                                                        size_t slotCount) const override {
