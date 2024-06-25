@@ -1481,8 +1481,6 @@ void SurfaceFlinger::applyActiveMode(PhysicalDisplayId displayId) {
 void SurfaceFlinger::initiateDisplayModeChanges() {
     ATRACE_CALL();
 
-    std::optional<PhysicalDisplayId> displayToUpdateImmediately;
-
     for (const auto& [displayId, physical] : FTL_FAKE_GUARD(mStateLock, mPhysicalDisplays)) {
         auto desiredModeOpt = mDisplayModeController.getDesiredMode(displayId);
         if (!desiredModeOpt) {
@@ -1536,21 +1534,14 @@ void SurfaceFlinger::initiateDisplayModeChanges() {
         if (outTimeline.refreshRequired) {
             scheduleComposite(FrameHint::kNone);
         } else {
-            // TODO(b/255635711): Remove `displayToUpdateImmediately` to `finalizeDisplayModeChange`
-            // for all displays. This was only needed when the loop iterated over `mDisplays` rather
-            // than `mPhysicalDisplays`.
-            displayToUpdateImmediately = displayId;
-        }
-    }
+            // HWC has requested to apply the mode change immediately rather than on the next frame.
+            finalizeDisplayModeChange(displayId);
 
-    if (displayToUpdateImmediately) {
-        const auto displayId = *displayToUpdateImmediately;
-        finalizeDisplayModeChange(displayId);
-
-        const auto desiredModeOpt = mDisplayModeController.getDesiredMode(displayId);
-        if (desiredModeOpt &&
-            mDisplayModeController.getActiveMode(displayId) == desiredModeOpt->mode) {
-            applyActiveMode(displayId);
+            const auto desiredModeOpt = mDisplayModeController.getDesiredMode(displayId);
+            if (desiredModeOpt &&
+                mDisplayModeController.getActiveMode(displayId) == desiredModeOpt->mode) {
+                applyActiveMode(displayId);
+            }
         }
     }
 }

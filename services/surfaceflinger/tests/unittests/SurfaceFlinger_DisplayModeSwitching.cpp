@@ -127,9 +127,9 @@ public:
     static constexpr HWDisplayId kInnerDisplayHwcId = PrimaryDisplayVariant::HWC_DISPLAY_ID;
     static constexpr HWDisplayId kOuterDisplayHwcId = kInnerDisplayHwcId + 1;
 
-    auto injectOuterDisplay() {
-        constexpr PhysicalDisplayId kOuterDisplayId = PhysicalDisplayId::fromPort(254u);
+    static constexpr PhysicalDisplayId kOuterDisplayId = PhysicalDisplayId::fromPort(254u);
 
+    auto injectOuterDisplay() {
         // For the inner display, this is handled by setupHwcHotplugCallExpectations.
         EXPECT_CALL(*mComposer, getDisplayConnectionType(kOuterDisplayHwcId, _))
                 .WillOnce(DoAll(SetArgPointee<1>(IComposerClient::DisplayConnectionType::INTERNAL),
@@ -266,6 +266,38 @@ TEST_F(DisplayModeSwitchingTest, changeRefreshRateWithoutRefreshRequired) {
     mFlinger.commit();
 
     EXPECT_THAT(mDisplay, ModeSettledTo(&dmc(), kModeId90));
+}
+
+TEST_F(DisplayModeSwitchingTest, changeRefreshRateOnTwoDisplaysWithoutRefreshRequired) {
+    const auto [innerDisplay, outerDisplay] = injectOuterDisplay();
+
+    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId60));
+    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId120));
+
+    EXPECT_EQ(NO_ERROR,
+              mFlinger.setDesiredDisplayModeSpecs(innerDisplay->getDisplayToken().promote(),
+                                                  mock::createDisplayModeSpecs(kModeId90, 120_Hz,
+                                                                               true)));
+    EXPECT_EQ(NO_ERROR,
+              mFlinger.setDesiredDisplayModeSpecs(outerDisplay->getDisplayToken().promote(),
+                                                  mock::createDisplayModeSpecs(kModeId60, 60_Hz,
+                                                                               true)));
+
+    EXPECT_THAT(innerDisplay, ModeSwitchingTo(&mFlinger, kModeId90));
+    EXPECT_THAT(outerDisplay, ModeSwitchingTo(&mFlinger, kModeId60));
+
+    // Verify that next commit will call setActiveConfigWithConstraints in HWC
+    // and complete the mode change.
+    const VsyncPeriodChangeTimeline timeline{.refreshRequired = false};
+    EXPECT_SET_ACTIVE_CONFIG(kInnerDisplayHwcId, kModeId90);
+    EXPECT_SET_ACTIVE_CONFIG(kOuterDisplayHwcId, kModeId60);
+
+    EXPECT_CALL(*mAppEventThread, onModeChanged(_)).Times(2);
+
+    mFlinger.commit();
+
+    EXPECT_THAT(innerDisplay, ModeSettledTo(&dmc(), kModeId90));
+    EXPECT_THAT(outerDisplay, ModeSettledTo(&dmc(), kModeId60));
 }
 
 TEST_F(DisplayModeSwitchingTest, twoConsecutiveSetDesiredDisplayModeSpecs) {
