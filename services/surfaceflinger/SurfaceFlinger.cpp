@@ -2907,6 +2907,7 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
         }
     }
 
+    ATRACE_NAME("postComposition");
     mTimeStats->recordFrameDuration(pacesetterTarget.frameBeginTime().ns(), systemTime());
 
     // Send a power hint after presentation is finished.
@@ -8153,12 +8154,12 @@ bool SurfaceFlinger::layersHasProtectedLayer(const std::vector<sp<LayerFE>>& lay
 // Accessing display requires mStateLock, and contention for this lock
 // is reduced when grabbed from the main thread, thus also reducing
 // risk of deadlocks.
-std::optional<SurfaceFlinger::OutputCompositionState>
-SurfaceFlinger::getDisplayAndLayerSnapshotsFromMainThread(
+std::optional<SurfaceFlinger::OutputCompositionState> SurfaceFlinger::getSnapshotsFromMainThread(
         RenderAreaBuilderVariant& renderAreaBuilder, GetLayerSnapshotsFunction getLayerSnapshotsFn,
         std::vector<sp<LayerFE>>& layerFEs) {
     return mScheduler
             ->schedule([=, this, &renderAreaBuilder, &layerFEs]() REQUIRES(kMainThreadContext) {
+                ATRACE_NAME("getSnapshotsFromMainThread");
                 auto layers = getLayerSnapshotsFn();
                 for (auto& [layer, layerFE] : layers) {
                     attachReleaseFenceFutureToLayer(layer, layerFE.get(), ui::INVALID_LAYER_STACK);
@@ -8188,8 +8189,7 @@ void SurfaceFlinger::captureScreenCommon(RenderAreaBuilderVariant renderAreaBuil
         FlagManager::getInstance().ce_fence_promise()) {
         std::vector<sp<LayerFE>> layerFEs;
         auto displayState =
-                getDisplayAndLayerSnapshotsFromMainThread(renderAreaBuilder, getLayerSnapshotsFn,
-                                                          layerFEs);
+                getSnapshotsFromMainThread(renderAreaBuilder, getLayerSnapshotsFn, layerFEs);
 
         const bool supportsProtected = getRenderEngine().supportsProtectedContent();
         bool hasProtectedLayer = false;

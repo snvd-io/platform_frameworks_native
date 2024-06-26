@@ -358,9 +358,8 @@ void RegionSamplingThread::captureSample() {
     if (FlagManager::getInstance().single_hop_screenshot() &&
         FlagManager::getInstance().ce_fence_promise()) {
         std::vector<sp<LayerFE>> layerFEs;
-        auto displayState =
-                mFlinger.getDisplayAndLayerSnapshotsFromMainThread(renderAreaBuilder,
-                                                                   getLayerSnapshotsFn, layerFEs);
+        auto displayState = mFlinger.getSnapshotsFromMainThread(renderAreaBuilder,
+                                                                getLayerSnapshotsFn, layerFEs);
         fenceResult =
                 mFlinger.captureScreenshot(renderAreaBuilder, buffer, kRegionSampling, kGrayscale,
                                            kIsProtected, nullptr, displayState, layerFEs)

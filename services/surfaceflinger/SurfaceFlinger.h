@@ -896,7 +896,7 @@ private:
 
     using OutputCompositionState = compositionengine::impl::OutputCompositionState;
 
-    std::optional<OutputCompositionState> getDisplayAndLayerSnapshotsFromMainThread(
+    std::optional<OutputCompositionState> getSnapshotsFromMainThread(
             RenderAreaBuilderVariant& renderAreaBuilder,
             GetLayerSnapshotsFunction getLayerSnapshotsFn, std::vector<sp<LayerFE>>& layerFEs);
 

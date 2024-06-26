@@ -26,6 +26,7 @@
 #include "TransactionCallbackInvoker.h"
 #include "BackgroundExecutor.h"
 #include "Utils/FenceUtils.h"
+#include "utils/Trace.h"
 
 #include <cinttypes>
 
@@ -164,7 +165,7 @@ void TransactionCallbackInvoker::addPresentFence(sp<Fence> presentFence) {
 void TransactionCallbackInvoker::sendCallbacks(bool onCommitOnly) {
     // For each listener
     auto completedTransactionsItr = mCompletedTransactions.begin();
-    BackgroundExecutor::Callbacks callbacks;
+    ftl::SmallVector<ListenerStats, 10> listenerStatsToSend;
     while (completedTransactionsItr != mCompletedTransactions.end()) {
         auto& [listener, transactionStatsDeque] = *completedTransactionsItr;
         ListenerStats listenerStats;
@@ -199,10 +200,7 @@ void TransactionCallbackInvoker::sendCallbacks(bool onCommitOnly) {
                 // keep it as an IBinder due to consistency reasons: if we
                 // interface_cast at the IPC boundary when reading a Parcel,
                 // we get pointers that compare unequal in the SF process.
-                callbacks.emplace_back([stats = std::move(listenerStats)]() {
-                    interface_cast<ITransactionCompletedListener>(stats.listener)
-                            ->onTransactionCompleted(stats);
-                });
+                listenerStatsToSend.emplace_back(std::move(listenerStats));
             }
         }
         completedTransactionsItr++;
@@ -212,7 +210,14 @@ void TransactionCallbackInvoker::sendCallbacks(bool onCommitOnly) {
         mPresentFence.clear();
     }
 
-    BackgroundExecutor::getInstance().sendCallbacks(std::move(callbacks));
+    BackgroundExecutor::getInstance().sendCallbacks(
+            {[listenerStatsToSend = std::move(listenerStatsToSend)]() {
+                ATRACE_NAME("TransactionCallbackInvoker::sendCallbacks");
+                for (auto& stats : listenerStatsToSend) {
+                    interface_cast<ITransactionCompletedListener>(stats.listener)
+                            ->onTransactionCompleted(stats);
+                }
+            }});
 }
 
 // -----------------------------------------------------------------------
