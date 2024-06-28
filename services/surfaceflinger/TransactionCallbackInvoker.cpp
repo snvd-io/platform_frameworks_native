@@ -65,13 +65,12 @@ status_t TransactionCallbackInvoker::addOnCommitCallbackHandles(
     if (handles.empty()) {
         return NO_ERROR;
     }
-    const std::vector<JankData>& jankData = std::vector<JankData>();
     for (const auto& handle : handles) {
         if (!containsOnCommitCallbacks(handle->callbackIds)) {
             outRemainingHandles.push_back(handle);
             continue;
         }
-        status_t err = addCallbackHandle(handle, jankData);
+        status_t err = addCallbackHandle(handle);
         if (err != NO_ERROR) {
             return err;
         }
@@ -81,12 +80,12 @@ status_t TransactionCallbackInvoker::addOnCommitCallbackHandles(
 }
 
 status_t TransactionCallbackInvoker::addCallbackHandles(
-        const std::deque<sp<CallbackHandle>>& handles, const std::vector<JankData>& jankData) {
+        const std::deque<sp<CallbackHandle>>& handles) {
     if (handles.empty()) {
         return NO_ERROR;
     }
     for (const auto& handle : handles) {
-        status_t err = addCallbackHandle(handle, jankData);
+        status_t err = addCallbackHandle(handle);
         if (err != NO_ERROR) {
             return err;
         }
@@ -112,8 +111,7 @@ status_t TransactionCallbackInvoker::findOrCreateTransactionStats(
     return NO_ERROR;
 }
 
-status_t TransactionCallbackInvoker::addCallbackHandle(const sp<CallbackHandle>& handle,
-        const std::vector<JankData>& jankData) {
+status_t TransactionCallbackInvoker::addCallbackHandle(const sp<CallbackHandle>& handle) {
     // If we can't find the transaction stats something has gone wrong. The client should call
     // startRegistration before trying to add a callback handle.
     TransactionStats* transactionStats;
@@ -152,8 +150,7 @@ status_t TransactionCallbackInvoker::addCallbackHandle(const sp<CallbackHandle>&
                                                     handle->previousReleaseFence,
                                                     handle->transformHint,
                                                     handle->currentMaxAcquiredBufferCount,
-                                                    eventStats, jankData,
-                                                    handle->previousReleaseCallbackId);
+                                                    eventStats, handle->previousReleaseCallbackId);
     }
     return NO_ERROR;
 }
