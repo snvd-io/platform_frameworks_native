@@ -29,6 +29,7 @@
 #include <android/gui/DisplayState.h>
 #include <android/gui/IJankListener.h>
 #include <android/gui/ISurfaceComposerClient.h>
+#include <common/trace.h>
 #include <cutils/atomic.h>
 #include <cutils/compiler.h>
 #include <ftl/algorithm.h>
@@ -53,7 +54,6 @@
 #include <utils/KeyedVector.h>
 #include <utils/RefBase.h>
 #include <utils/SortedVector.h>
-#include <utils/Trace.h>
 #include <utils/threads.h>
 
 #include <compositionengine/OutputColorSetting.h>
@@ -450,7 +450,7 @@ private:
             if (it != mCounterByLayerHandle.end()) {
                 auto [name, pendingBuffers] = it->second;
                 int32_t count = ++(*pendingBuffers);
-                ATRACE_INT(name.c_str(), count);
+                SFTRACE_INT(name.c_str(), count);
             } else {
                 ALOGW("Handle not found! %p", layerHandle);
             }

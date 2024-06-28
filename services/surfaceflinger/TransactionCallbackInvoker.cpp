@@ -26,12 +26,10 @@
 #include "TransactionCallbackInvoker.h"
 #include "BackgroundExecutor.h"
 #include "Utils/FenceUtils.h"
-#include "utils/Trace.h"
-
-#include <cinttypes>
 
 #include <binder/IInterface.h>
 #include <common/FlagManager.h>
+#include <common/trace.h>
 #include <utils/RefBase.h>
 
 namespace android {
@@ -209,7 +207,7 @@ void TransactionCallbackInvoker::sendCallbacks(bool onCommitOnly) {
 
     BackgroundExecutor::getInstance().sendCallbacks(
             {[listenerStatsToSend = std::move(listenerStatsToSend)]() {
-                ATRACE_NAME("TransactionCallbackInvoker::sendCallbacks");
+                SFTRACE_NAME("TransactionCallbackInvoker::sendCallbacks");
                 for (auto& stats : listenerStatsToSend) {
                     interface_cast<ITransactionCompletedListener>(stats.listener)
                             ->onTransactionCompleted(stats);
