@@ -590,7 +590,8 @@ status_t InputPublisher::publishMotionEvent(
                 mInputVerifier.processMovement(deviceId, source, action, pointerCount,
                                                pointerProperties, pointerCoords, flags);
         if (!result.ok()) {
-            LOG(FATAL) << "Bad stream: " << result.error();
+            LOG(ERROR) << "Bad stream: " << result.error();
+            return BAD_VALUE;
         }
     }
     if (debugTransportPublisher()) {

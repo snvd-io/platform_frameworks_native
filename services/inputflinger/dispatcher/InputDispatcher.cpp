@@ -3830,6 +3830,10 @@ void InputDispatcher::startDispatchCycleLocked(nsecs_t currentTime,
                 }
                 const MotionEntry& motionEntry = static_cast<const MotionEntry&>(eventEntry);
                 status = publishMotionEvent(*connection, *dispatchEntry);
+                if (status == BAD_VALUE) {
+                    logDispatchStateLocked();
+                    LOG(FATAL) << "Publisher failed for " << motionEntry;
+                }
                 if (mTracer) {
                     ensureEventTraced(motionEntry);
                     mTracer->traceEventDispatch(*dispatchEntry, *motionEntry.traceTracker);
