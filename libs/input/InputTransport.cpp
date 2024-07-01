@@ -375,13 +375,11 @@ status_t InputChannel::openInputChannelPair(const std::string& name,
 
     sp<IBinder> token = sp<BBinder>::make();
 
-    std::string serverChannelName = name + " (server)";
     android::base::unique_fd serverFd(sockets[0]);
-    outServerChannel = InputChannel::create(serverChannelName, std::move(serverFd), token);
+    outServerChannel = InputChannel::create(name, std::move(serverFd), token);
 
-    std::string clientChannelName = name + " (client)";
     android::base::unique_fd clientFd(sockets[1]);
-    outClientChannel = InputChannel::create(clientChannelName, std::move(clientFd), token);
+    outClientChannel = InputChannel::create(name, std::move(clientFd), token);
     return OK;
 }
 
