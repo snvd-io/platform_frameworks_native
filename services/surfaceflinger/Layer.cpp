@@ -3240,7 +3240,7 @@ void Layer::recordLayerHistoryBufferUpdate(const scheduler::LayerProps& layerPro
         return static_cast<nsecs_t>(0);
     }();
 
-    if (ATRACE_ENABLED() && presentTime > 0) {
+    if (SFTRACE_ENABLED() && presentTime > 0) {
         const auto presentIn = TimePoint::fromNs(presentTime) - TimePoint::now();
         SFTRACE_FORMAT_INSTANT("presentIn %s", to_string(presentIn).c_str());
     }
