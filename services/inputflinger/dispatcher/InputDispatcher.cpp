@@ -1652,12 +1652,6 @@ bool InputDispatcher::dispatchConfigurationChangedLocked(nsecs_t currentTime,
     // Reset key repeating in case a keyboard device was added or removed or something.
     resetKeyRepeatLocked();
 
-    // Enqueue a command to run outside the lock to tell the policy that the configuration changed.
-    auto command = [this, eventTime = entry.eventTime]() REQUIRES(mLock) {
-        scoped_unlock unlock(mLock);
-        mPolicy.notifyConfigurationChanged(eventTime);
-    };
-    postCommandLocked(std::move(command));
     return true;
 }
 

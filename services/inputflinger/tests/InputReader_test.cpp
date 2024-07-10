@@ -966,6 +966,7 @@ TEST_F(InputReaderTest, LoopOnce_WhenDeviceScanFinished_SendsConfigurationChange
     NotifyConfigurationChangedArgs args;
 
     ASSERT_NO_FATAL_FAILURE(mFakeListener->assertNotifyConfigurationChangedWasCalled(&args));
+    ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertConfigurationChanged());
     ASSERT_EQ(ARBITRARY_TIME, args.eventTime);
 }
 
@@ -1476,9 +1477,10 @@ protected:
         // Since this test is run on a real device, all the input devices connected
         // to the test device will show up in mReader. We wait for those input devices to
         // show up before beginning the tests.
-        ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertInputDevicesChanged());
         ASSERT_NO_FATAL_FAILURE(mTestListener->assertNotifyInputDevicesChangedWasCalled());
         ASSERT_NO_FATAL_FAILURE(mTestListener->assertNotifyConfigurationChangedWasCalled());
+        ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertInputDevicesChanged());
+        ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertConfigurationChanged());
     }
 };
 
@@ -1498,12 +1500,12 @@ TEST_F(InputReaderIntegrationTest, TestInvalidDevice) {
     // consider it as a valid device.
     std::unique_ptr<UinputDevice> invalidDevice = createUinputDevice<InvalidUinputDevice>();
     ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertInputDevicesNotChanged());
-    ASSERT_NO_FATAL_FAILURE(mTestListener->assertNotifyConfigurationChangedWasNotCalled());
+    ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertConfigurationNotChanged());
     ASSERT_EQ(numDevices, mFakePolicy->getInputDevices().size());
 
     invalidDevice.reset();
     ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertInputDevicesNotChanged());
-    ASSERT_NO_FATAL_FAILURE(mTestListener->assertNotifyConfigurationChangedWasNotCalled());
+    ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertConfigurationNotChanged());
     ASSERT_EQ(numDevices, mFakePolicy->getInputDevices().size());
 }
 
@@ -1512,7 +1514,7 @@ TEST_F(InputReaderIntegrationTest, AddNewDevice) {
 
     std::unique_ptr<UinputHomeKey> keyboard = createUinputDevice<UinputHomeKey>();
     ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertInputDevicesChanged());
-    ASSERT_NO_FATAL_FAILURE(mTestListener->assertNotifyConfigurationChangedWasCalled());
+    ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertConfigurationChanged());
     ASSERT_EQ(initialNumDevices + 1, mFakePolicy->getInputDevices().size());
 
     const auto device = waitForDevice(keyboard->getName());
@@ -1523,7 +1525,7 @@ TEST_F(InputReaderIntegrationTest, AddNewDevice) {
 
     keyboard.reset();
     ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertInputDevicesChanged());
-    ASSERT_NO_FATAL_FAILURE(mTestListener->assertNotifyConfigurationChangedWasCalled());
+    ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertConfigurationChanged());
     ASSERT_EQ(initialNumDevices, mFakePolicy->getInputDevices().size());
 }
 
@@ -1668,6 +1670,7 @@ protected:
 
         mDevice = createUinputDevice<UinputTouchScreen>(Rect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT));
         ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertInputDevicesChanged());
+        ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertConfigurationChanged());
         ASSERT_NO_FATAL_FAILURE(mTestListener->assertNotifyConfigurationChangedWasCalled());
         const auto info = waitForDevice(mDevice->getName());
         ASSERT_TRUE(info);
@@ -1737,6 +1740,7 @@ protected:
                                      UNIQUE_ID, isInputPortAssociation ? DISPLAY_PORT : NO_PORT,
                                      ViewportType::INTERNAL);
         ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertInputDevicesChanged());
+        ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertConfigurationChanged());
         ASSERT_NO_FATAL_FAILURE(mTestListener->assertNotifyConfigurationChangedWasCalled());
         const auto info = waitForDevice(mDevice->getName());
         ASSERT_TRUE(info);
@@ -2070,7 +2074,7 @@ TEST_P(TouchIntegrationTest, ExternalStylusConnectedDuringTouchGesture) {
     // Connecting an external stylus mid-gesture should not interrupt the ongoing gesture stream.
     auto externalStylus = createUinputDevice<UinputExternalStylus>();
     ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertInputDevicesChanged());
-    ASSERT_NO_FATAL_FAILURE(mTestListener->assertNotifyConfigurationChangedWasCalled());
+    ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertConfigurationChanged());
     const auto stylusInfo = waitForDevice(externalStylus->getName());
     ASSERT_TRUE(stylusInfo);
 
@@ -2083,7 +2087,7 @@ TEST_P(TouchIntegrationTest, ExternalStylusConnectedDuringTouchGesture) {
     // Disconnecting an external stylus mid-gesture should not interrupt the ongoing gesture stream.
     externalStylus.reset();
     ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertInputDevicesChanged());
-    ASSERT_NO_FATAL_FAILURE(mTestListener->assertNotifyConfigurationChangedWasCalled());
+    ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertConfigurationChanged());
     ASSERT_NO_FATAL_FAILURE(mTestListener->assertNotifyMotionWasNotCalled());
 
     // Up
@@ -2141,6 +2145,7 @@ private:
         mStylusDeviceLifecycleTracker = createUinputDevice<T>();
         mStylus = mStylusDeviceLifecycleTracker.get();
         ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertInputDevicesChanged());
+        ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertConfigurationChanged());
         ASSERT_NO_FATAL_FAILURE(mTestListener->assertNotifyConfigurationChangedWasCalled());
         const auto info = waitForDevice(mStylus->getName());
         ASSERT_TRUE(info);
@@ -2411,7 +2416,7 @@ TEST_F(ExternalStylusIntegrationTest, ExternalStylusConnectionChangesTouchscreen
     std::unique_ptr<UinputExternalStylusWithPressure> stylus =
             createUinputDevice<UinputExternalStylusWithPressure>();
     ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertInputDevicesChanged());
-    ASSERT_NO_FATAL_FAILURE(mTestListener->assertNotifyConfigurationChangedWasCalled());
+    ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertConfigurationChanged());
     const auto stylusInfo = waitForDevice(stylus->getName());
     ASSERT_TRUE(stylusInfo);
 
@@ -2429,7 +2434,7 @@ TEST_F(ExternalStylusIntegrationTest, FusedExternalStylusPressureReported) {
     std::unique_ptr<UinputExternalStylusWithPressure> stylus =
             createUinputDevice<UinputExternalStylusWithPressure>();
     ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertInputDevicesChanged());
-    ASSERT_NO_FATAL_FAILURE(mTestListener->assertNotifyConfigurationChangedWasCalled());
+    ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertConfigurationChanged());
     const auto stylusInfo = waitForDevice(stylus->getName());
     ASSERT_TRUE(stylusInfo);
 
@@ -2475,7 +2480,7 @@ TEST_F(ExternalStylusIntegrationTest, FusedExternalStylusPressureNotReported) {
     std::unique_ptr<UinputExternalStylusWithPressure> stylus =
             createUinputDevice<UinputExternalStylusWithPressure>();
     ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertInputDevicesChanged());
-    ASSERT_NO_FATAL_FAILURE(mTestListener->assertNotifyConfigurationChangedWasCalled());
+    ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertConfigurationChanged());
     const auto stylusInfo = waitForDevice(stylus->getName());
     ASSERT_TRUE(stylusInfo);
 
@@ -2555,7 +2560,7 @@ TEST_F(ExternalStylusIntegrationTest, UnfusedExternalStylus) {
     // touch pointers.
     std::unique_ptr<UinputExternalStylus> stylus = createUinputDevice<UinputExternalStylus>();
     ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertInputDevicesChanged());
-    ASSERT_NO_FATAL_FAILURE(mTestListener->assertNotifyConfigurationChangedWasCalled());
+    ASSERT_NO_FATAL_FAILURE(mFakePolicy->assertConfigurationChanged());
     const auto stylusInfo = waitForDevice(stylus->getName());
     ASSERT_TRUE(stylusInfo);
 
