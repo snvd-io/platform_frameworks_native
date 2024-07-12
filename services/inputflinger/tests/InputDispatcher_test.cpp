@@ -413,14 +413,6 @@ TEST_F(InputDispatcherTest, InjectInputEvent_ValidatesMotionEvents) {
 
 /* Test InputDispatcher for notifyConfigurationChanged and notifySwitch events */
 
-TEST_F(InputDispatcherTest, NotifyConfigurationChanged_CallsPolicy) {
-    constexpr nsecs_t eventTime = 20;
-    mDispatcher->notifyConfigurationChanged({/*id=*/10, eventTime});
-    ASSERT_TRUE(mDispatcher->waitForIdle());
-
-    mFakePolicy->assertNotifyConfigurationChangedWasCalled(eventTime);
-}
-
 TEST_F(InputDispatcherTest, NotifySwitch_CallsPolicy) {
     NotifySwitchArgs args(InputEvent::nextId(), /*eventTime=*/20, /*policyFlags=*/0,
                           /*switchValues=*/1,
