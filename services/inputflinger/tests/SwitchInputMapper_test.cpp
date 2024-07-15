@@ -25,39 +25,41 @@
 #include <linux/input-event-codes.h>
 
 #include "InputMapperTest.h"
+#include "TestConstants.h"
 
 namespace android {
 
-class SwitchInputMapperTest : public InputMapperTest {
+class SwitchInputMapperTest : public InputMapperUnitTest {
 protected:
+    void SetUp() override {
+        InputMapperUnitTest::SetUp();
+        createDevice();
+        mMapper = createInputMapper<SwitchInputMapper>(*mDeviceContext,
+                                                       mFakePolicy->getReaderConfiguration());
+    }
 };
 
 TEST_F(SwitchInputMapperTest, GetSources) {
-    SwitchInputMapper& mapper = constructAndAddMapper<SwitchInputMapper>();
-
-    ASSERT_EQ(uint32_t(AINPUT_SOURCE_SWITCH), mapper.getSources());
+    ASSERT_EQ(uint32_t(AINPUT_SOURCE_SWITCH), mMapper->getSources());
 }
 
 TEST_F(SwitchInputMapperTest, GetSwitchState) {
-    SwitchInputMapper& mapper = constructAndAddMapper<SwitchInputMapper>();
+    setSwitchState(1, {SW_LID});
+    ASSERT_EQ(1, mMapper->getSwitchState(AINPUT_SOURCE_ANY, SW_LID));
 
-    mFakeEventHub->setSwitchState(EVENTHUB_ID, SW_LID, 1);
-    ASSERT_EQ(1, mapper.getSwitchState(AINPUT_SOURCE_ANY, SW_LID));
-
-    mFakeEventHub->setSwitchState(EVENTHUB_ID, SW_LID, 0);
-    ASSERT_EQ(0, mapper.getSwitchState(AINPUT_SOURCE_ANY, SW_LID));
+    setSwitchState(0, {SW_LID});
+    ASSERT_EQ(0, mMapper->getSwitchState(AINPUT_SOURCE_ANY, SW_LID));
 }
 
 TEST_F(SwitchInputMapperTest, Process) {
-    SwitchInputMapper& mapper = constructAndAddMapper<SwitchInputMapper>();
     std::list<NotifyArgs> out;
-    out = process(mapper, ARBITRARY_TIME, READ_TIME, EV_SW, SW_LID, 1);
+    out = process(ARBITRARY_TIME, EV_SW, SW_LID, 1);
     ASSERT_TRUE(out.empty());
-    out = process(mapper, ARBITRARY_TIME, READ_TIME, EV_SW, SW_JACK_PHYSICAL_INSERT, 1);
+    out = process(ARBITRARY_TIME, EV_SW, SW_JACK_PHYSICAL_INSERT, 1);
     ASSERT_TRUE(out.empty());
-    out = process(mapper, ARBITRARY_TIME, READ_TIME, EV_SW, SW_HEADPHONE_INSERT, 0);
+    out = process(ARBITRARY_TIME, EV_SW, SW_HEADPHONE_INSERT, 0);
     ASSERT_TRUE(out.empty());
-    out = process(mapper, ARBITRARY_TIME, READ_TIME, EV_SYN, SYN_REPORT, 0);
+    out = process(ARBITRARY_TIME, EV_SYN, SYN_REPORT, 0);
 
     ASSERT_EQ(1u, out.size());
     const NotifySwitchArgs& args = std::get<NotifySwitchArgs>(*out.begin());
