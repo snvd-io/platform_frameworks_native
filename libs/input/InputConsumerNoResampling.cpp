@@ -114,7 +114,7 @@ void addSample(MotionEvent& event, const InputMessage& msg) {
 
     // TODO(b/329770983): figure out if it's safe to combine events with mismatching metaState
     event.setMetaState(event.getMetaState() | msg.body.motion.metaState);
-    event.addSample(msg.body.motion.eventTime, pointerCoords.data());
+    event.addSample(msg.body.motion.eventTime, pointerCoords.data(), msg.body.motion.eventId);
 }
 
 std::unique_ptr<TouchModeEvent> createTouchModeEvent(const InputMessage& msg) {
