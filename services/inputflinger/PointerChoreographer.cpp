@@ -165,10 +165,6 @@ void PointerChoreographer::notifyInputDevicesChanged(const NotifyInputDevicesCha
     mNextListener.notify(args);
 }
 
-void PointerChoreographer::notifyConfigurationChanged(const NotifyConfigurationChangedArgs& args) {
-    mNextListener.notify(args);
-}
-
 void PointerChoreographer::notifyKey(const NotifyKeyArgs& args) {
     fadeMouseCursorOnKeyPress(args);
     mNextListener.notify(args);
