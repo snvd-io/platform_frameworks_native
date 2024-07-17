@@ -23,34 +23,40 @@
 
 #include <EventHub.h>
 #include <NotifyArgs.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <input/Input.h>
 
 #include "InputMapperTest.h"
+#include "VibrationElement.h"
 
 namespace android {
 
-class VibratorInputMapperTest : public InputMapperTest {
+class VibratorInputMapperTest : public InputMapperUnitTest {
 protected:
-    void SetUp() override { InputMapperTest::SetUp(DEVICE_CLASSES | InputDeviceClass::VIBRATOR); }
+    void SetUp() override {
+        InputMapperUnitTest::SetUp();
+        createDevice();
+        EXPECT_CALL(mMockEventHub, getDeviceClasses(EVENTHUB_ID))
+                .WillRepeatedly(testing::Return(InputDeviceClass::VIBRATOR));
+        EXPECT_CALL(mMockEventHub, getVibratorIds(EVENTHUB_ID))
+                .WillRepeatedly(testing::Return<std::vector<int32_t>>({0, 1}));
+        mMapper = createInputMapper<VibratorInputMapper>(*mDeviceContext,
+                                                         mFakePolicy->getReaderConfiguration());
+    }
 };
 
 TEST_F(VibratorInputMapperTest, GetSources) {
-    VibratorInputMapper& mapper = constructAndAddMapper<VibratorInputMapper>();
-
-    ASSERT_EQ(AINPUT_SOURCE_UNKNOWN, mapper.getSources());
+    ASSERT_EQ(AINPUT_SOURCE_UNKNOWN, mMapper->getSources());
 }
 
 TEST_F(VibratorInputMapperTest, GetVibratorIds) {
-    VibratorInputMapper& mapper = constructAndAddMapper<VibratorInputMapper>();
-
-    ASSERT_EQ(mapper.getVibratorIds().size(), 2U);
+    ASSERT_EQ(mMapper->getVibratorIds().size(), 2U);
 }
 
 TEST_F(VibratorInputMapperTest, Vibrate) {
     constexpr uint8_t DEFAULT_AMPLITUDE = 192;
     constexpr int32_t VIBRATION_TOKEN = 100;
-    VibratorInputMapper& mapper = constructAndAddMapper<VibratorInputMapper>();
 
     VibrationElement pattern(2);
     VibrationSequence sequence(2);
@@ -66,21 +72,19 @@ TEST_F(VibratorInputMapperTest, Vibrate) {
     std::vector<int64_t> timings = {0, 1};
     std::vector<uint8_t> amplitudes = {DEFAULT_AMPLITUDE, DEFAULT_AMPLITUDE / 2};
 
-    ASSERT_FALSE(mapper.isVibrating());
+    ASSERT_FALSE(mMapper->isVibrating());
     // Start vibrating
-    std::list<NotifyArgs> out = mapper.vibrate(sequence, /*repeat=*/-1, VIBRATION_TOKEN);
-    ASSERT_TRUE(mapper.isVibrating());
+    std::list<NotifyArgs> out = mMapper->vibrate(sequence, /*repeat=*/-1, VIBRATION_TOKEN);
+    ASSERT_TRUE(mMapper->isVibrating());
     // Verify vibrator state listener was notified.
-    mReader->loopOnce();
     ASSERT_EQ(1u, out.size());
     const NotifyVibratorStateArgs& vibrateArgs = std::get<NotifyVibratorStateArgs>(*out.begin());
     ASSERT_EQ(DEVICE_ID, vibrateArgs.deviceId);
     ASSERT_TRUE(vibrateArgs.isOn);
     // Stop vibrating
-    out = mapper.cancelVibrate(VIBRATION_TOKEN);
-    ASSERT_FALSE(mapper.isVibrating());
+    out = mMapper->cancelVibrate(VIBRATION_TOKEN);
+    ASSERT_FALSE(mMapper->isVibrating());
     // Verify vibrator state listener was notified.
-    mReader->loopOnce();
     ASSERT_EQ(1u, out.size());
     const NotifyVibratorStateArgs& cancelArgs = std::get<NotifyVibratorStateArgs>(*out.begin());
     ASSERT_EQ(DEVICE_ID, cancelArgs.deviceId);
