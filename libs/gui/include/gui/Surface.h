@@ -167,6 +167,11 @@ public:
      */
     virtual void allocateBuffers();
 
+#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_PLATFORM_API_IMPROVEMENTS)
+    // See IGraphicBufferProducer::allowAllocation
+    status_t allowAllocation(bool allowAllocation);
+#endif // COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_PLATFORM_API_IMPROVEMENTS)
+
     /* Sets the generation number on the IGraphicBufferProducer and updates the
      * generation number on any buffers attached to the Surface after this call.
      * See IGBP::setGenerationNumber for more information. */

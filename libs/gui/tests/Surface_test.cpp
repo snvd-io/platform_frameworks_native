@@ -2286,6 +2286,32 @@ TEST_F(SurfaceTest, PlatformBufferMethods) {
     EXPECT_EQ(OK, surface->queueBuffer(heldTooLongBuffer));
     EXPECT_EQ(BAD_VALUE, surface->detachBuffer(heldTooLongBuffer));
 }
+
+TEST_F(SurfaceTest, AllowAllocation) {
+    sp<IGraphicBufferProducer> producer;
+    sp<IGraphicBufferConsumer> consumer;
+    BufferQueue::createBufferQueue(&producer, &consumer);
+
+    // controlledByApp must be true to disable blocking
+    sp<CpuConsumer> cpuConsumer = sp<CpuConsumer>::make(consumer, 1, /*controlledByApp*/ true);
+    sp<Surface> surface = sp<Surface>::make(producer, /*controlledByApp*/ true);
+    sp<StubSurfaceListener> listener = sp<StubSurfaceListener>::make();
+    sp<GraphicBuffer> buffer;
+    sp<Fence> fence;
+
+    EXPECT_EQ(OK,
+              surface->connect(NATIVE_WINDOW_API_CPU, listener, /* reportBufferRemoval */ false));
+    EXPECT_EQ(OK, surface->allowAllocation(false));
+
+    EXPECT_EQ(OK, surface->setDequeueTimeout(-1));
+    EXPECT_EQ(WOULD_BLOCK, surface->dequeueBuffer(&buffer, &fence));
+
+    EXPECT_EQ(OK, surface->setDequeueTimeout(10));
+    EXPECT_EQ(TIMED_OUT, surface->dequeueBuffer(&buffer, &fence));
+
+    EXPECT_EQ(OK, surface->allowAllocation(true));
+    EXPECT_EQ(OK, surface->dequeueBuffer(&buffer, &fence));
+}
 #endif // COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_PLATFORM_API_IMPROVEMENTS)
 
 } // namespace android

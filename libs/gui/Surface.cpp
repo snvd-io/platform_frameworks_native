@@ -163,6 +163,12 @@ void Surface::allocateBuffers() {
             mReqFormat, mReqUsage);
 }
 
+#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_PLATFORM_API_IMPROVEMENTS)
+status_t Surface::allowAllocation(bool allowAllocation) {
+    return mGraphicBufferProducer->allowAllocation(allowAllocation);
+}
+#endif // COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_PLATFORM_API_IMPROVEMENTS)
+
 status_t Surface::setGenerationNumber(uint32_t generation) {
     status_t result = mGraphicBufferProducer->setGenerationNumber(generation);
     if (result == NO_ERROR) {
