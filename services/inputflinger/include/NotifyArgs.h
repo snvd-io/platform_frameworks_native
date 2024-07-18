@@ -39,6 +39,21 @@ struct NotifyInputDevicesChangedArgs {
     NotifyInputDevicesChangedArgs& operator=(const NotifyInputDevicesChangedArgs&) = default;
 };
 
+/* Describes a configuration change event. */
+struct NotifyConfigurationChangedArgs {
+    int32_t id;
+    nsecs_t eventTime;
+
+    inline NotifyConfigurationChangedArgs() {}
+
+    NotifyConfigurationChangedArgs(int32_t id, nsecs_t eventTime);
+
+    bool operator==(const NotifyConfigurationChangedArgs& rhs) const = default;
+
+    NotifyConfigurationChangedArgs(const NotifyConfigurationChangedArgs& other) = default;
+    NotifyConfigurationChangedArgs& operator=(const NotifyConfigurationChangedArgs&) = default;
+};
+
 /* Describes a key event. */
 struct NotifyKeyArgs {
     int32_t id;
@@ -219,8 +234,8 @@ struct NotifyVibratorStateArgs {
 };
 
 using NotifyArgs =
-        std::variant<NotifyInputDevicesChangedArgs, NotifyKeyArgs, NotifyMotionArgs,
-                     NotifySensorArgs, NotifySwitchArgs, NotifyDeviceResetArgs,
+        std::variant<NotifyInputDevicesChangedArgs, NotifyConfigurationChangedArgs, NotifyKeyArgs,
+                     NotifyMotionArgs, NotifySensorArgs, NotifySwitchArgs, NotifyDeviceResetArgs,
                      NotifyPointerCaptureChangedArgs, NotifyVibratorStateArgs>;
 
 const char* toString(const NotifyArgs& args);
