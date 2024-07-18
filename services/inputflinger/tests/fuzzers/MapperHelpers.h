@@ -32,7 +32,8 @@ constexpr size_t kValidTypes[] = {EV_SW,
                                   EV_MSC,
                                   EV_REL,
                                   android::EventHubInterface::DEVICE_ADDED,
-                                  android::EventHubInterface::DEVICE_REMOVED};
+                                  android::EventHubInterface::DEVICE_REMOVED,
+                                  android::EventHubInterface::FINISHED_DEVICE_SCAN};
 
 constexpr size_t kValidCodes[] = {
         SYN_REPORT,
@@ -295,6 +296,7 @@ public:
     }
     void setTouchAffineTransformation(const TouchAffineTransformation t) { mTransform = t; }
     void notifyStylusGestureStarted(int32_t, nsecs_t) {}
+    void notifyConfigurationChanged(nsecs_t) {}
     bool isInputMethodConnectionActive() override { return mFdp->ConsumeBool(); }
     std::optional<DisplayViewport> getPointerViewportForAssociatedDisplay(
             ui::LogicalDisplayId associatedDisplayId) override {
@@ -305,6 +307,7 @@ public:
 class FuzzInputListener : public virtual InputListenerInterface {
 public:
     void notifyInputDevicesChanged(const NotifyInputDevicesChangedArgs& args) override {}
+    void notifyConfigurationChanged(const NotifyConfigurationChangedArgs& args) override {}
     void notifyKey(const NotifyKeyArgs& args) override {}
     void notifyMotion(const NotifyMotionArgs& args) override {}
     void notifySwitch(const NotifySwitchArgs& args) override {}
@@ -343,6 +346,7 @@ public:
     void updateLedMetaState(int32_t metaState) override{};
     int32_t getLedMetaState() override { return mFdp->ConsumeIntegral<int32_t>(); };
     void notifyStylusGestureStarted(int32_t, nsecs_t) {}
+    void notifyConfigurationChanged(nsecs_t) {}
 
     void setPreventingTouchpadTaps(bool prevent) override {}
     bool isPreventingTouchpadTaps() override { return mFdp->ConsumeBool(); };

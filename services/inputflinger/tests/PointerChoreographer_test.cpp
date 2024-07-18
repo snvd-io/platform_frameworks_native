@@ -196,6 +196,7 @@ private:
 TEST_F(PointerChoreographerTest, ForwardsArgsToInnerListener) {
     const std::vector<NotifyArgs>
             allArgs{NotifyInputDevicesChangedArgs{},
+                    NotifyConfigurationChangedArgs{},
                     KeyArgsBuilder(AKEY_EVENT_ACTION_DOWN, AINPUT_SOURCE_KEYBOARD).build(),
                     MotionArgsBuilder(AMOTION_EVENT_ACTION_DOWN, AINPUT_SOURCE_TOUCHSCREEN)
                             .pointer(FIRST_TOUCH_POINTER)
@@ -212,6 +213,9 @@ TEST_F(PointerChoreographerTest, ForwardsArgsToInnerListener) {
                 std::visit(Visitor{
                                    [&](const NotifyInputDevicesChangedArgs& args) {
                                        mTestListener.assertNotifyInputDevicesChangedWasCalled();
+                                   },
+                                   [&](const NotifyConfigurationChangedArgs& args) {
+                                       mTestListener.assertNotifyConfigurationChangedWasCalled();
                                    },
                                    [&](const NotifyKeyArgs& args) {
                                        mTestListener.assertNotifyKeyWasCalled();

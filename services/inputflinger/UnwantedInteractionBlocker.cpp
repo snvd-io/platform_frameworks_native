@@ -342,6 +342,12 @@ UnwantedInteractionBlocker::UnwantedInteractionBlocker(InputListenerInterface& l
                                                        bool enablePalmRejection)
       : mQueuedListener(listener), mEnablePalmRejection(enablePalmRejection) {}
 
+void UnwantedInteractionBlocker::notifyConfigurationChanged(
+        const NotifyConfigurationChangedArgs& args) {
+    mQueuedListener.notifyConfigurationChanged(args);
+    mQueuedListener.flush();
+}
+
 void UnwantedInteractionBlocker::notifyKey(const NotifyKeyArgs& args) {
     mQueuedListener.notifyKey(args);
     mQueuedListener.flush();
