@@ -35,7 +35,6 @@
 #include <TestInputListener.h>
 #include <TouchInputMapper.h>
 #include <UinputDevice.h>
-#include <VibratorInputMapper.h>
 #include <android-base/thread_annotations.h>
 #include <com_android_input_flags.h>
 #include <ftl/enum.h>
@@ -3060,64 +3059,6 @@ TEST_F(InputDeviceTest, KernelBufferOverflowResetsMappers) {
     event.value = 1;
     unused = mDevice->process(&event, /*count=*/1);
     mapper.assertProcessWasCalled();
-}
-
-// --- VibratorInputMapperTest ---
-class VibratorInputMapperTest : public InputMapperTest {
-protected:
-    void SetUp() override { InputMapperTest::SetUp(DEVICE_CLASSES | InputDeviceClass::VIBRATOR); }
-};
-
-TEST_F(VibratorInputMapperTest, GetSources) {
-    VibratorInputMapper& mapper = constructAndAddMapper<VibratorInputMapper>();
-
-    ASSERT_EQ(AINPUT_SOURCE_UNKNOWN, mapper.getSources());
-}
-
-TEST_F(VibratorInputMapperTest, GetVibratorIds) {
-    VibratorInputMapper& mapper = constructAndAddMapper<VibratorInputMapper>();
-
-    ASSERT_EQ(mapper.getVibratorIds().size(), 2U);
-}
-
-TEST_F(VibratorInputMapperTest, Vibrate) {
-    constexpr uint8_t DEFAULT_AMPLITUDE = 192;
-    constexpr int32_t VIBRATION_TOKEN = 100;
-    VibratorInputMapper& mapper = constructAndAddMapper<VibratorInputMapper>();
-
-    VibrationElement pattern(2);
-    VibrationSequence sequence(2);
-    pattern.duration = std::chrono::milliseconds(200);
-    pattern.channels = {{/*vibratorId=*/0, DEFAULT_AMPLITUDE / 2},
-                        {/*vibratorId=*/1, DEFAULT_AMPLITUDE}};
-    sequence.addElement(pattern);
-    pattern.duration = std::chrono::milliseconds(500);
-    pattern.channels = {{/*vibratorId=*/0, DEFAULT_AMPLITUDE / 4},
-                        {/*vibratorId=*/1, DEFAULT_AMPLITUDE}};
-    sequence.addElement(pattern);
-
-    std::vector<int64_t> timings = {0, 1};
-    std::vector<uint8_t> amplitudes = {DEFAULT_AMPLITUDE, DEFAULT_AMPLITUDE / 2};
-
-    ASSERT_FALSE(mapper.isVibrating());
-    // Start vibrating
-    std::list<NotifyArgs> out = mapper.vibrate(sequence, /*repeat=*/-1, VIBRATION_TOKEN);
-    ASSERT_TRUE(mapper.isVibrating());
-    // Verify vibrator state listener was notified.
-    mReader->loopOnce();
-    ASSERT_EQ(1u, out.size());
-    const NotifyVibratorStateArgs& vibrateArgs = std::get<NotifyVibratorStateArgs>(*out.begin());
-    ASSERT_EQ(DEVICE_ID, vibrateArgs.deviceId);
-    ASSERT_TRUE(vibrateArgs.isOn);
-    // Stop vibrating
-    out = mapper.cancelVibrate(VIBRATION_TOKEN);
-    ASSERT_FALSE(mapper.isVibrating());
-    // Verify vibrator state listener was notified.
-    mReader->loopOnce();
-    ASSERT_EQ(1u, out.size());
-    const NotifyVibratorStateArgs& cancelArgs = std::get<NotifyVibratorStateArgs>(*out.begin());
-    ASSERT_EQ(DEVICE_ID, cancelArgs.deviceId);
-    ASSERT_FALSE(cancelArgs.isOn);
 }
 
 // --- SensorInputMapperTest ---
