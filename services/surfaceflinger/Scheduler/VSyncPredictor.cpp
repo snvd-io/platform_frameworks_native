@@ -451,7 +451,7 @@ Duration VSyncPredictor::ensureMinFrameDurationIsKept(TimePoint expectedPresentT
 
     const auto currentPeriod = mRateMap.find(idealPeriod())->second.slope;
     const auto threshold = currentPeriod / 2;
-    const auto minFramePeriod = minFramePeriodLocked().ns();
+    const auto minFramePeriod = minFramePeriodLocked();
 
     auto prev = lastConfirmedPresentTime.ns();
     for (auto& current : mPastExpectedPresentTimes) {
@@ -462,10 +462,10 @@ Duration VSyncPredictor::ensureMinFrameDurationIsKept(TimePoint expectedPresentT
                                            1e6f);
         }
 
-        const auto minPeriodViolation = current.ns() - prev + threshold < minFramePeriod;
+        const auto minPeriodViolation = current.ns() - prev + threshold < minFramePeriod.ns();
         if (minPeriodViolation) {
             SFTRACE_NAME("minPeriodViolation");
-            current = TimePoint::fromNs(prev + minFramePeriod);
+            current = TimePoint::fromNs(prev + minFramePeriod.ns());
             prev = current.ns();
         } else {
             break;
@@ -476,7 +476,7 @@ Duration VSyncPredictor::ensureMinFrameDurationIsKept(TimePoint expectedPresentT
         const auto phase = Duration(mPastExpectedPresentTimes.back() - expectedPresentTime);
         if (phase > 0ns) {
             for (auto& timeline : mTimelines) {
-                timeline.shiftVsyncSequence(phase);
+                timeline.shiftVsyncSequence(phase, minFramePeriod);
             }
             mPastExpectedPresentTimes.clear();
             return phase;
@@ -777,8 +777,15 @@ bool VSyncPredictor::VsyncTimeline::isVSyncInPhase(Model model, nsecs_t vsync, F
     return vsyncSequence.seq % divisor == 0;
 }
 
-void VSyncPredictor::VsyncTimeline::shiftVsyncSequence(Duration phase) {
+void VSyncPredictor::VsyncTimeline::shiftVsyncSequence(Duration phase, Period minFramePeriod) {
     if (mLastVsyncSequence) {
+        const auto renderRate = mRenderRateOpt.value_or(Fps::fromPeriodNsecs(mIdealPeriod.ns()));
+        const auto threshold = mIdealPeriod.ns() / 2;
+        if (renderRate.getPeriodNsecs() - phase.ns() + threshold >= minFramePeriod.ns()) {
+            SFTRACE_FORMAT_INSTANT("Not-Adjusting vsync by %.2f",
+                                   static_cast<float>(phase.ns()) / 1e6f);
+            return;
+        }
         SFTRACE_FORMAT_INSTANT("adjusting vsync by %.2f", static_cast<float>(phase.ns()) / 1e6f);
         mLastVsyncSequence->vsyncTime += phase.ns();
     }
