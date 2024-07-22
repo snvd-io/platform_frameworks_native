@@ -620,6 +620,18 @@ public:
         mFlinger->mNewLayers.emplace_back(std::move(layer));
     }
 
+    // Used to add a layer before updateLayerSnapshots is called.
+    // Must have transactionsFlushed enabled for the new layer to be updated.
+    void addLayer(uint32_t layerId) {
+        std::scoped_lock<std::mutex> lock(mFlinger->mCreatedLayersLock);
+        LayerCreationArgs args(std::make_optional(layerId));
+        args.flinger = this->mFlinger.get();
+        auto layer = std::make_unique<frontend::RequestedLayerState>(args);
+        auto legacyLayer = sp<Layer>::make(args);
+        injectLegacyLayer(legacyLayer);
+        mFlinger->mNewLayers.emplace_back(std::move(layer));
+    }
+
     /* ------------------------------------------------------------------------
      * Read-only access to private data to assert post-conditions.
      */
