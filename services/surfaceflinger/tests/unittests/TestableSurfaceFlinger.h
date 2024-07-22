@@ -326,9 +326,13 @@ public:
 
     auto& mutableStateLock() { return mFlinger->mStateLock; }
 
-    static auto findOutputLayerForDisplay(const sp<Layer>& layer,
-                                          const sp<const DisplayDevice>& display) {
-        return layer->findOutputLayerForDisplay(display.get());
+    compositionengine::OutputLayer* findOutputLayerForDisplay(
+            uint32_t layerId, const sp<const DisplayDevice>& display) {
+        ftl::FakeGuard guard(kMainThreadContext);
+        if (mFlinger->mLegacyLayers.find(layerId) == mFlinger->mLegacyLayers.end()) {
+            return nullptr;
+        }
+        return mFlinger->mLegacyLayers[layerId]->findOutputLayerForDisplay(display.get());
     }
 
     static void setLayerSidebandStream(const sp<Layer>& layer,
@@ -340,15 +344,12 @@ public:
 
     void setLayerCompositionType(const sp<Layer>& layer,
                                  aidl::android::hardware::graphics::composer3::Composition type) {
-        auto outputLayer = findOutputLayerForDisplay(layer, mFlinger->getDefaultDisplayDevice());
+        auto outputLayer = findOutputLayerForDisplay(static_cast<uint32_t>(layer->sequence),
+                                                     mFlinger->getDefaultDisplayDevice());
         LOG_ALWAYS_FATAL_IF(!outputLayer);
         auto& state = outputLayer->editState();
         LOG_ALWAYS_FATAL_IF(!outputLayer->getState().hwc);
         (*state.hwc).hwcCompositionType = type;
-    }
-
-    static void setLayerPotentialCursor(const sp<Layer>& layer, bool potentialCursor) {
-        layer->mPotentialCursor = potentialCursor;
     }
 
     static void setLayerDrawingParent(const sp<Layer>& layer, const sp<Layer>& drawingParent) {
@@ -395,7 +396,7 @@ public:
             targets.try_emplace(id, &frameTargeter.target());
             targeters.try_emplace(id, &frameTargeter);
         }
-
+        mFlinger->setTransactionFlags(eTransactionFlushNeeded);
         mFlinger->commit(displayId, targets);
 
         if (composite) {
@@ -505,10 +506,9 @@ public:
                                           captureResults, displayState, layers, layerFEs);
     }
 
-    auto traverseLayersInLayerStack(ui::LayerStack layerStack, int32_t uid,
-                                    std::unordered_set<uint32_t> excludeLayerIds,
-                                    const LayerVector::Visitor& visitor) {
-        return mFlinger->traverseLayersInLayerStack(layerStack, uid, excludeLayerIds, visitor);
+    auto getLayerSnapshotsForScreenshotsFn(ui::LayerStack layerStack, uint32_t uid) {
+        return mFlinger->getLayerSnapshotsForScreenshots(layerStack, uid,
+                                                         std::unordered_set<uint32_t>{});
     }
 
     auto getDisplayNativePrimaries(const sp<IBinder>& displayToken,
@@ -637,11 +637,23 @@ public:
     void injectLegacyLayer(sp<Layer> layer) {
         FTL_FAKE_GUARD(kMainThreadContext,
                        mFlinger->mLegacyLayers[static_cast<uint32_t>(layer->sequence)] = layer);
-    };
+    }
 
     void releaseLegacyLayer(uint32_t sequence) {
         FTL_FAKE_GUARD(kMainThreadContext, mFlinger->mLegacyLayers.erase(sequence));
+    }
+
+    auto getLegacyLayer(uint32_t layerId) {
+        ftl::FakeGuard guard(kMainThreadContext);
+        return mFlinger->mLegacyLayers[layerId];
     };
+
+    void destroyAllLayerHandles() {
+        ftl::FakeGuard guard(kMainThreadContext);
+        for (auto [layerId, legacyLayer] : mFlinger->mLegacyLayers) {
+            mFlinger->onHandleDestroyed(nullptr, legacyLayer, layerId);
+        }
+    }
 
     auto setLayerHistoryDisplayArea(uint32_t displayArea) {
         return mFlinger->mScheduler->onActiveDisplayAreaChanged(displayArea);
