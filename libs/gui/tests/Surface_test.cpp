@@ -54,6 +54,8 @@
 #include <limits>
 #include <thread>
 
+#include "testserver/TestServerClient.h"
+
 namespace android {
 
 using namespace std::chrono_literals;
