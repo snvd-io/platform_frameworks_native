@@ -980,18 +980,12 @@ private:
         return nullptr;
     }
 
-    // Returns the primary display or (for foldables) the active display, assuming that the inner
-    // and outer displays have mutually exclusive power states.
+    // Returns the primary display or (for foldables) the active display.
     sp<const DisplayDevice> getDefaultDisplayDeviceLocked() const REQUIRES(mStateLock) {
         return const_cast<SurfaceFlinger*>(this)->getDefaultDisplayDeviceLocked();
     }
 
     sp<DisplayDevice> getDefaultDisplayDeviceLocked() REQUIRES(mStateLock) {
-        if (const auto display = getDisplayDeviceLocked(mActiveDisplayId)) {
-            return display;
-        }
-        // The active display is outdated, so fall back to the primary display.
-        mActiveDisplayId = getPrimaryDisplayIdLocked();
         return getDisplayDeviceLocked(mActiveDisplayId);
     }
 
@@ -1330,7 +1324,7 @@ private:
 
     display::PhysicalDisplays mPhysicalDisplays GUARDED_BY(mStateLock);
 
-    // The inner or outer display for foldables, assuming they have mutually exclusive power states.
+    // The inner or outer display for foldables, while unfolded or folded, respectively.
     std::atomic<PhysicalDisplayId> mActiveDisplayId;
 
     display::DisplayModeController mDisplayModeController;

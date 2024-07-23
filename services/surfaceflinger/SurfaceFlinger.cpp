@@ -911,9 +911,11 @@ void SurfaceFlinger::init() FTL_FAKE_GUARD(kMainThreadContext) {
     LOG_ALWAYS_FATAL_IF(!configureLocked(),
                         "Initial display configuration failed: HWC did not hotplug");
 
+    mActiveDisplayId = getPrimaryDisplayIdLocked();
+
     // Commit primary display.
     sp<const DisplayDevice> display;
-    if (const auto indexOpt = mCurrentState.getDisplayIndex(getPrimaryDisplayIdLocked())) {
+    if (const auto indexOpt = mCurrentState.getDisplayIndex(mActiveDisplayId)) {
         const auto& displays = mCurrentState.displays;
 
         const auto& token = displays.keyAt(*indexOpt);
