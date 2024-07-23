@@ -66,6 +66,8 @@ protected:
         mFakePolicy = sp<FakeInputReaderPolicy>::make();
         EXPECT_CALL(mMockInputReaderContext, getPolicy).WillRepeatedly(Return(mFakePolicy.get()));
 
+        ON_CALL((*mDevice), getSources).WillByDefault(Return(AINPUT_SOURCE_KEYBOARD));
+
         mMapper = createInputMapper<KeyboardInputMapper>(*mDeviceContext, mReaderConfiguration,
                                                          AINPUT_SOURCE_KEYBOARD);
     }

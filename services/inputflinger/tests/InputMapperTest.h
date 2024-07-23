@@ -121,11 +121,12 @@ protected:
     T& constructAndAddMapper(Args... args) {
         // ensure a device entry exists for this eventHubId
         mDevice->addEmptyEventHubDevice(EVENTHUB_ID);
-        // configure the empty device
-        configureDevice(/*changes=*/{});
 
-        return mDevice->constructAndAddMapper<T>(EVENTHUB_ID, mFakePolicy->getReaderConfiguration(),
-                                                 args...);
+        auto& mapper =
+                mDevice->constructAndAddMapper<T>(EVENTHUB_ID,
+                                                  mFakePolicy->getReaderConfiguration(), args...);
+        configureDevice(/*changes=*/{});
+        return mapper;
     }
 
     void setDisplayInfoAndReconfigure(ui::LogicalDisplayId displayId, int32_t width, int32_t height,
