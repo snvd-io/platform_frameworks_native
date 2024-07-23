@@ -59,3 +59,11 @@ flag {
   bug: "294133380"
   is_fixed_read_only: true
 } # buffer_release_channel
+
+flag {
+  name: "wb_surface_connect_methods"
+  namespace: "core_graphics"
+  description: "Remove redundant connect methods in Surface."
+  bug: "354273690"
+  is_fixed_read_only: true
+} # wb_surface_connect_methods
