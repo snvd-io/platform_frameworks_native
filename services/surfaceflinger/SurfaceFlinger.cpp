@@ -4274,15 +4274,6 @@ void SurfaceFlinger::requestDisplayModes(std::vector<display::DisplayModeRequest
     }
 }
 
-void SurfaceFlinger::triggerOnFrameRateOverridesChanged() {
-    PhysicalDisplayId displayId = [&]() {
-        ConditionalLock lock(mStateLock, std::this_thread::get_id() != mMainThreadId);
-        return getDefaultDisplayDeviceLocked()->getPhysicalId();
-    }();
-
-    mScheduler->onFrameRateOverridesChanged(scheduler::Cycle::Render, displayId);
-}
-
 void SurfaceFlinger::notifyCpuLoadUp() {
     mPowerAdvisor->notifyCpuLoadUp();
 }
@@ -7304,15 +7295,9 @@ status_t SurfaceFlinger::onTransact(uint32_t code, const Parcel& data, Parcel* r
                 return NO_ERROR;
             }
             case 1039: {
-                PhysicalDisplayId displayId = [&]() {
-                    Mutex::Autolock lock(mStateLock);
-                    return getDefaultDisplayDeviceLocked()->getPhysicalId();
-                }();
-
-                auto inUid = static_cast<uid_t>(data.readInt32());
+                const auto uid = static_cast<uid_t>(data.readInt32());
                 const auto refreshRate = data.readFloat();
-                mScheduler->setPreferredRefreshRateForUid(FrameRateOverride{inUid, refreshRate});
-                mScheduler->onFrameRateOverridesChanged(scheduler::Cycle::Render, displayId);
+                mScheduler->setPreferredRefreshRateForUid(FrameRateOverride{uid, refreshRate});
                 return NO_ERROR;
             }
             // Toggle caching feature
@@ -8535,10 +8520,7 @@ status_t SurfaceFlinger::applyRefreshRateSelectorPolicy(
     setDesiredMode({std::move(preferredMode), .emitEvent = true});
 
     // Update the frameRateOverride list as the display render rate might have changed
-    if (mScheduler->updateFrameRateOverrides(scheduler::GlobalSignals{}, preferredFps)) {
-        triggerOnFrameRateOverridesChanged();
-    }
-
+    mScheduler->updateFrameRateOverrides(scheduler::GlobalSignals{}, preferredFps);
     return NO_ERROR;
 }
 
@@ -8698,13 +8680,7 @@ const std::unordered_map<std::string, uint32_t>& SurfaceFlinger::getGenericLayer
 }
 
 status_t SurfaceFlinger::setGameModeFrameRateOverride(uid_t uid, float frameRate) {
-    PhysicalDisplayId displayId = [&]() {
-        Mutex::Autolock lock(mStateLock);
-        return getDefaultDisplayDeviceLocked()->getPhysicalId();
-    }();
-
-    mScheduler->setGameModeFrameRateForUid(FrameRateOverride{static_cast<uid_t>(uid), frameRate});
-    mScheduler->onFrameRateOverridesChanged(scheduler::Cycle::Render, displayId);
+    mScheduler->setGameModeFrameRateForUid(FrameRateOverride{uid, frameRate});
     return NO_ERROR;
 }
 
