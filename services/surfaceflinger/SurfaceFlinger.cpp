@@ -2623,7 +2623,7 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
         }
     }
 
-    if (pacesetterFrameTarget.isFramePending()) {
+    if (pacesetterFrameTarget.wouldBackpressureHwc()) {
         if (mBackpressureGpuComposition || pacesetterFrameTarget.didMissHwcFrame()) {
             if (FlagManager::getInstance().vrr_config()) {
                 mScheduler->getVsyncSchedule()->getTracker().onFrameMissed(
@@ -2921,6 +2921,9 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
         // Now that the current frame has been presented above, PowerAdvisor needs the present time
         // of the previous frame (whose fence is signaled by now) to determine how long the HWC had
         // waited on that fence to retire before presenting.
+        // TODO(b/355238809) `presentFenceForPreviousFrame` might not always be signaled (e.g. on
+        // devices
+        //  where HWC does not block on the previous present fence). Revise this assumtion.
         const auto& previousPresentFence = pacesetterTarget.presentFenceForPreviousFrame();
 
         mPowerAdvisor->setSfPresentTiming(TimePoint::fromNs(previousPresentFence->getSignalTime()),
