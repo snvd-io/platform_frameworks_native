@@ -2164,12 +2164,12 @@ sp<IDisplayEventConnection> SurfaceFlinger::createDisplayEventConnection(
     return mScheduler->createDisplayEventConnection(cycle, eventRegistration, layerHandle);
 }
 
-void SurfaceFlinger::scheduleCommit(FrameHint hint) {
+void SurfaceFlinger::scheduleCommit(FrameHint hint, Duration workDurationSlack) {
     if (hint == FrameHint::kActive) {
         mScheduler->resetIdleTimer();
     }
     mPowerAdvisor->notifyDisplayUpdateImminentAndCpuReset();
-    mScheduler->scheduleFrame();
+    mScheduler->scheduleFrame(workDurationSlack);
 }
 
 void SurfaceFlinger::scheduleComposite(FrameHint hint) {
@@ -2629,7 +2629,10 @@ bool SurfaceFlinger::commit(PhysicalDisplayId pacesetterId,
                 mScheduler->getVsyncSchedule()->getTracker().onFrameMissed(
                         pacesetterFrameTarget.expectedPresentTime());
             }
-            scheduleCommit(FrameHint::kNone);
+            const Duration slack = FlagManager::getInstance().allow_n_vsyncs_in_targeter()
+                    ? TimePoint::now() - pacesetterFrameTarget.frameBeginTime()
+                    : Duration::fromNs(0);
+            scheduleCommit(FrameHint::kNone, slack);
             return false;
         }
     }
