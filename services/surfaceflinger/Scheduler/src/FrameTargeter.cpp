@@ -61,8 +61,10 @@ bool FrameTarget::wouldPresentEarly(Period vsyncPeriod, Period minFramePeriod) c
 
     const auto [wouldBackpressure, fence] =
             expectedSignaledPresentFence(vsyncPeriod, minFramePeriod);
-    return wouldBackpressure && fence.fenceTime->isValid() &&
-            fence.fenceTime->getSignalTime() != Fence::SIGNAL_TIME_PENDING;
+
+    return !wouldBackpressure ||
+            (fence.fenceTime->isValid() &&
+             fence.fenceTime->getSignalTime() != Fence::SIGNAL_TIME_PENDING);
 }
 
 const FenceTimePtr& FrameTarget::presentFenceForPreviousFrame() const {
