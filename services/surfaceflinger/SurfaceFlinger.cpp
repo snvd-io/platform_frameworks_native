@@ -40,6 +40,7 @@
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 #include <binder/PermissionCache.h>
+#include <com_android_graphics_libgui_flags.h>
 #include <com_android_graphics_surfaceflinger_flags.h>
 #include <common/FlagManager.h>
 #include <common/trace.h>
@@ -3722,11 +3723,20 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
                  state.surface.get());
         const auto displayId = PhysicalDisplayId::tryCast(compositionDisplay->getId());
         LOG_FATAL_IF(!displayId);
+#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_CONSUMER_BASE_OWNS_BQ)
+        const auto frameBufferSurface =
+                sp<FramebufferSurface>::make(getHwComposer(), *displayId, bqProducer, bqConsumer,
+                                             state.physical->activeMode->getResolution(),
+                                             ui::Size(maxGraphicsWidth, maxGraphicsHeight));
+        displaySurface = frameBufferSurface;
+        producer = frameBufferSurface->getSurface()->getIGraphicBufferProducer();
+#else
         displaySurface =
                 sp<FramebufferSurface>::make(getHwComposer(), *displayId, bqConsumer,
                                              state.physical->activeMode->getResolution(),
                                              ui::Size(maxGraphicsWidth, maxGraphicsHeight));
         producer = bqProducer;
+#endif // COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_CONSUMER_BASE_OWNS_BQ)
     }
 
     LOG_FATAL_IF(!displaySurface);
