@@ -768,7 +768,6 @@ private:
             REQUIRES(mStateLock, kMainThreadContext);
     void doCommitTransactions() REQUIRES(mStateLock);
 
-    void updateLayerMetadataSnapshot();
     std::vector<std::pair<Layer*, LayerFE*>> moveSnapshotsToCompositionArgs(
             compositionengine::CompositionRefreshArgs& refreshArgs, bool cursorOnly)
             REQUIRES(kMainThreadContext);
@@ -1274,9 +1273,6 @@ private:
     bool mSomeChildrenChanged;
     bool mForceTransactionDisplayChange = false;
     bool mUpdateAttachedChoreographer = false;
-
-    // Set if LayerMetadata has changed since the last LayerMetadata snapshot.
-    bool mLayerMetadataSnapshotNeeded = false;
 
     // TODO(b/238781169) validate these on composition
     // Tracks layers that have pending frames which are candidates for being

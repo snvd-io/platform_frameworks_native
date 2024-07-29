@@ -2750,10 +2750,6 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
 
     const bool updateTaskMetadata = mCompositionEngine->getFeatureFlags().test(
             compositionengine::Feature::kSnapshotLayerMetadata);
-    if (updateTaskMetadata && (mVisibleRegionsDirty || mLayerMetadataSnapshotNeeded)) {
-        updateLayerMetadataSnapshot();
-        mLayerMetadataSnapshotNeeded = false;
-    }
 
     refreshArgs.bufferIdsToUncache = std::move(mBufferIdsToUncache);
 
@@ -8484,31 +8480,6 @@ std::shared_ptr<renderengine::ExternalTexture> SurfaceFlinger::getExternalTextur
     }
 
     return nullptr;
-}
-
-void SurfaceFlinger::updateLayerMetadataSnapshot() {
-    LayerMetadata parentMetadata;
-    for (const auto& layer : mDrawingState.layersSortedByZ) {
-        layer->updateMetadataSnapshot(parentMetadata);
-    }
-
-    std::unordered_set<Layer*> visited;
-    mDrawingState.traverse([&visited](Layer* layer) {
-        if (visited.find(layer) != visited.end()) {
-            return;
-        }
-
-        // If the layer isRelativeOf, then either it's relative metadata will be set
-        // recursively when updateRelativeMetadataSnapshot is called on its relative parent or
-        // it's relative parent has been deleted. Clear the layer's relativeLayerMetadata to ensure
-        // that layers with deleted relative parents don't hold stale relativeLayerMetadata.
-        if (layer->getDrawingState().isRelativeOf) {
-            layer->editLayerSnapshot()->relativeLayerMetadata = {};
-            return;
-        }
-
-        layer->updateRelativeMetadataSnapshot({}, visited);
-    });
 }
 
 void SurfaceFlinger::moveSnapshotsFromCompositionArgs(
