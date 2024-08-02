@@ -401,7 +401,7 @@ void ASurfaceTransaction_setColor(ASurfaceTransaction* _Nonnull transaction,
  * clipped by the bounds of its parent. The destination rect's width and height must be > 0.
  *
  * \param transform The transform applied after the source rect is applied to the buffer. This
- * parameter should be set to 0 for no transform. To specify a transfrom use the
+ * parameter should be set to 0 for no transform. To specify a transform use the
  * NATIVE_WINDOW_TRANSFORM_* enum.
  *
  * Available since API level 29.
