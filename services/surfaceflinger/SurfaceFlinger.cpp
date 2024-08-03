@@ -3596,7 +3596,7 @@ void SurfaceFlinger::dispatchDisplayModeChangeEvent(PhysicalDisplayId displayId,
             ? &scheduler::Scheduler::onPrimaryDisplayModeChanged
             : &scheduler::Scheduler::onNonPrimaryDisplayModeChanged;
 
-    ((*mScheduler).*onDisplayModeChanged)(scheduler::Cycle::Render, mode);
+    ((*mScheduler).*onDisplayModeChanged)(mode);
 }
 
 sp<DisplayDevice> SurfaceFlinger::setupNewDisplayDeviceInternal(
@@ -7962,10 +7962,10 @@ status_t SurfaceFlinger::applyRefreshRateSelectorPolicy(
     // TODO(b/140204874): Leave the event in until we do proper testing with all apps that might
     // be depending in this callback.
     if (const auto activeMode = selector.getActiveMode(); displayId == mActiveDisplayId) {
-        mScheduler->onPrimaryDisplayModeChanged(scheduler::Cycle::Render, activeMode);
+        mScheduler->onPrimaryDisplayModeChanged(activeMode);
         toggleKernelIdleTimer();
     } else {
-        mScheduler->onNonPrimaryDisplayModeChanged(scheduler::Cycle::Render, activeMode);
+        mScheduler->onNonPrimaryDisplayModeChanged(activeMode);
     }
 
     auto preferredModeOpt = getPreferredDisplayMode(displayId, currentPolicy.defaultMode);
