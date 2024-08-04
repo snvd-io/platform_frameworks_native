@@ -1340,19 +1340,13 @@ void SurfaceFlinger::setDesiredMode(display::DisplayModeRequest&& desiredMode) {
             // VsyncController model is locked.
             mScheduler->modulateVsync(displayId, &VsyncModulator::onRefreshRateChangeInitiated);
 
-            if (displayId == mActiveDisplayId) {
-                mScheduler->updatePhaseConfiguration(mode.fps);
-            }
-
+            mScheduler->updatePhaseConfiguration(displayId, mode.fps);
             mScheduler->setModeChangePending(true);
             break;
         }
         case DesiredModeAction::InitiateRenderRateSwitch:
             mScheduler->setRenderRate(displayId, mode.fps, /*applyImmediately*/ false);
-
-            if (displayId == mActiveDisplayId) {
-                mScheduler->updatePhaseConfiguration(mode.fps);
-            }
+            mScheduler->updatePhaseConfiguration(displayId, mode.fps);
 
             if (emitEvent) {
                 mScheduler->onDisplayModeChanged(displayId, mode);
@@ -1447,9 +1441,7 @@ void SurfaceFlinger::finalizeDisplayModeChange(PhysicalDisplayId displayId) {
     mDisplayModeController.finalizeModeChange(displayId, activeMode.modePtr->getId(),
                                               activeMode.modePtr->getVsyncRate(), activeMode.fps);
 
-    if (displayId == mActiveDisplayId) {
-        mScheduler->updatePhaseConfiguration(activeMode.fps);
-    }
+    mScheduler->updatePhaseConfiguration(displayId, activeMode.fps);
 
     if (pendingModeOpt->emitEvent) {
         mScheduler->onDisplayModeChanged(displayId, activeMode);
@@ -1473,11 +1465,9 @@ void SurfaceFlinger::applyActiveMode(PhysicalDisplayId displayId) {
 
     constexpr bool kAllowToEnable = true;
     mScheduler->resyncToHardwareVsync(displayId, kAllowToEnable, std::move(activeModePtr).take());
-    mScheduler->setRenderRate(displayId, renderFps, /*applyImmediately*/ true);
 
-    if (displayId == mActiveDisplayId) {
-        mScheduler->updatePhaseConfiguration(renderFps);
-    }
+    mScheduler->setRenderRate(displayId, renderFps, /*applyImmediately*/ true);
+    mScheduler->updatePhaseConfiguration(displayId, renderFps);
 }
 
 void SurfaceFlinger::initiateDisplayModeChanges() {
