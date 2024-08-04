@@ -3838,11 +3838,8 @@ void SurfaceFlinger::processDisplayChanged(const wp<IBinder>& displayToken,
                 setPowerModeInternal(display, hal::PowerMode::ON);
             }
 
-            // TODO(b/175678251) Call a listener instead.
-            if (currentState.physical->hwcDisplayId == getHwComposer().getPrimaryHwcDisplayId()) {
-                const Fps refreshRate =
-                        mDisplayModeController.getActiveMode(display->getPhysicalId()).fps;
-                mScheduler->resetPhaseConfiguration(refreshRate);
+            if (display->getPhysicalId() == mActiveDisplayId) {
+                onActiveDisplayChangedLocked(nullptr, *display);
             }
         }
         return;
