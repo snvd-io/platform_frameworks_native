@@ -8265,8 +8265,6 @@ void SurfaceFlinger::onActiveDisplayChangedLocked(const DisplayDevice* inactiveD
     mActiveDisplayId = activeDisplay.getPhysicalId();
     activeDisplay.getCompositionDisplay()->setLayerCachingTexturePoolEnabled(true);
 
-    mScheduler->resetPhaseConfiguration(mDisplayModeController.getActiveMode(mActiveDisplayId).fps);
-
     // TODO(b/255635711): Check for pending mode changes on other displays.
     mScheduler->setModeChangePending(false);
 
