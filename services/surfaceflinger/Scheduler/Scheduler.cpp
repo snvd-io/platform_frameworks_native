@@ -424,8 +424,12 @@ void Scheduler::onHdcpLevelsChanged(Cycle cycle, PhysicalDisplayId displayId,
     eventThreadFor(cycle).onHdcpLevelsChanged(displayId, connectedLevel, maxLevel);
 }
 
-void Scheduler::onPrimaryDisplayModeChanged(const FrameRateMode& mode) {
-    {
+bool Scheduler::onDisplayModeChanged(PhysicalDisplayId displayId, const FrameRateMode& mode) {
+    const bool isPacesetter =
+            FTL_FAKE_GUARD(kMainThreadContext,
+                           (std::scoped_lock(mDisplayLock), displayId == mPacesetterDisplayId));
+
+    if (isPacesetter) {
         std::lock_guard<std::mutex> lock(mPolicyLock);
         mPolicy.emittedModeOpt = mode;
 
@@ -433,7 +437,12 @@ void Scheduler::onPrimaryDisplayModeChanged(const FrameRateMode& mode) {
         // again for the new refresh rate.
         mPolicy.contentRequirements.clear();
     }
-    onNonPrimaryDisplayModeChanged(mode);
+
+    if (hasEventThreads()) {
+        eventThreadFor(Cycle::Render).onModeChanged(mode);
+    }
+
+    return isPacesetter;
 }
 
 void Scheduler::emitModeChangeIfNeeded() {
@@ -455,10 +464,7 @@ void Scheduler::emitModeChangeIfNeeded() {
     }
 
     mPolicy.emittedModeOpt = mode;
-    onNonPrimaryDisplayModeChanged(mode);
-}
 
-void Scheduler::onNonPrimaryDisplayModeChanged(const FrameRateMode& mode) {
     if (hasEventThreads()) {
         eventThreadFor(Cycle::Render).onModeChanged(mode);
     }

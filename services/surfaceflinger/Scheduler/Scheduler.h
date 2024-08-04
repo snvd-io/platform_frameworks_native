@@ -154,8 +154,8 @@ public:
 
     void dispatchHotplugError(int32_t errorCode);
 
-    void onPrimaryDisplayModeChanged(const FrameRateMode&) EXCLUDES(mPolicyLock);
-    void onNonPrimaryDisplayModeChanged(const FrameRateMode&);
+    // Returns true if the PhysicalDisplayId is the pacesetter.
+    bool onDisplayModeChanged(PhysicalDisplayId, const FrameRateMode&) EXCLUDES(mPolicyLock);
 
     void enableSyntheticVsync(bool = true) REQUIRES(kMainThreadContext);
 

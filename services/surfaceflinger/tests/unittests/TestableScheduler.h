@@ -193,7 +193,7 @@ public:
         return Scheduler::chooseDisplayModes();
     }
 
-    using Scheduler::onPrimaryDisplayModeChanged;
+    using Scheduler::onDisplayModeChanged;
 
     void setInitialHwVsyncEnabled(PhysicalDisplayId id, bool enabled) {
         auto schedule = getVsyncSchedule(id);
