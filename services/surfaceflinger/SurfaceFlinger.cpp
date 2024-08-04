@@ -1280,20 +1280,14 @@ status_t SurfaceFlinger::getDisplayStats(const sp<IBinder>& displayToken,
         return BAD_VALUE;
     }
 
+    // TODO: b/277364366 - Require a display token from clients and remove fallback to pacesetter.
     std::optional<PhysicalDisplayId> displayIdOpt;
-    {
+    if (displayToken) {
         Mutex::Autolock lock(mStateLock);
-        if (displayToken) {
-            displayIdOpt = getPhysicalDisplayIdLocked(displayToken);
-            if (!displayIdOpt) {
-                ALOGW("%s: Invalid physical display token %p", __func__, displayToken.get());
-                return NAME_NOT_FOUND;
-            }
-        } else {
-            // TODO (b/277364366): Clients should be updated to pass in the display they
-            // want, rather than us picking an arbitrary one (the active display, in this
-            // case).
-            displayIdOpt = mActiveDisplayId;
+        displayIdOpt = getPhysicalDisplayIdLocked(displayToken);
+        if (!displayIdOpt) {
+            ALOGW("%s: Invalid physical display token %p", __func__, displayToken.get());
+            return NAME_NOT_FOUND;
         }
     }
 
