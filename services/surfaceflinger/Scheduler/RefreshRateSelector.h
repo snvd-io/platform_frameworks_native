@@ -386,6 +386,7 @@ public:
 
         Callbacks platform;
         Callbacks kernel;
+        Callbacks vrr;
     };
 
     void setIdleTimerCallbacks(IdleTimerCallbacks callbacks) EXCLUDES(mIdleTimerCallbacksMutex) {
@@ -504,6 +505,9 @@ private:
     std::optional<IdleTimerCallbacks::Callbacks> getIdleTimerCallbacks() const
             REQUIRES(mIdleTimerCallbacksMutex) {
         if (!mIdleTimerCallbacks) return {};
+
+        if (mIsVrrDevice) return mIdleTimerCallbacks->vrr;
+
         return mConfig.kernelIdleTimerController.has_value() ? mIdleTimerCallbacks->kernel
                                                              : mIdleTimerCallbacks->platform;
     }
@@ -539,7 +543,7 @@ private:
     std::vector<FrameRateMode> mAppRequestFrameRates GUARDED_BY(mLock);
 
     // Caches whether the device is VRR-compatible based on the active display mode.
-    bool mIsVrrDevice GUARDED_BY(mLock) = false;
+    std::atomic_bool mIsVrrDevice = false;
 
     Policy mDisplayManagerPolicy GUARDED_BY(mLock);
     std::optional<Policy> mOverridePolicy GUARDED_BY(mLock);
