@@ -231,10 +231,6 @@ Layer::~Layer() {
     LOG_ALWAYS_FATAL_IF(std::this_thread::get_id() != mFlinger->mMainThreadId,
                         "Layer destructor called off the main thread.");
 
-    // The original layer and the clone layer share the same texture and buffer. Therefore, only
-    // one of the layers, in this case the original layer, needs to handle the deletion. The
-    // original layer and the clone should be removed at the same time so there shouldn't be any
-    // issue with the clone layer trying to use the texture.
     if (mBufferInfo.mBuffer != nullptr) {
         callReleaseBufferCallback(mDrawingState.releaseBufferListener,
                                   mBufferInfo.mBuffer->getBuffer(), mBufferInfo.mFrameNumber,
@@ -249,10 +245,6 @@ Layer::~Layer() {
 
     if (mDrawingState.sidebandStream != nullptr) {
         mFlinger->mTunnelModeEnabledReporter->decrementTunnelModeCount();
-    }
-    if (mHadClonedChild) {
-        auto& roots = mFlinger->mLayerMirrorRoots;
-        roots.erase(std::remove(roots.begin(), roots.end(), this), roots.end());
     }
     if (hasTrustedPresentationListener()) {
         mFlinger->mNumTrustedPresentationListeners--;
@@ -1872,16 +1864,6 @@ WindowInfo Layer::fillInputInfo(const InputDisplayArgs& displayArgs) {
         info.inputConfig |= WindowInfo::InputConfig::TRUSTED_OVERLAY;
     }
 
-    // If the layer is a clone, we need to crop the input region to cloned root to prevent
-    // touches from going outside the cloned area.
-    if (isClone()) {
-        info.inputConfig |= WindowInfo::InputConfig::CLONE;
-        if (const sp<Layer> clonedRoot = getClonedRoot()) {
-            const Rect rect = displayTransform.transform(Rect{clonedRoot->mScreenBounds});
-            info.touchableRegion = info.touchableRegion.intersect(rect);
-        }
-    }
-
     Rect bufferSize = getBufferSize(getDrawingState());
     info.contentSize = Size(bufferSize.width(), bufferSize.height());
 
@@ -1907,16 +1889,6 @@ Rect Layer::getInputBoundsInDisplaySpace(const FloatRect& inputBounds,
     const ui::Transform layerToScreen = getInputTransform();
     const ui::Transform layerToDisplay = screenToDisplay * layerToScreen;
     return Rect{layerToDisplay.transform(croppedInputBounds)};
-}
-
-sp<Layer> Layer::getClonedRoot() {
-    if (mClonedChild != nullptr) {
-        return sp<Layer>::fromExisting(this);
-    }
-    if (mDrawingParent == nullptr || mDrawingParent.promote() == nullptr) {
-        return nullptr;
-    }
-    return mDrawingParent.promote()->getClonedRoot();
 }
 
 bool Layer::hasInputInfo() const {
@@ -1958,166 +1930,6 @@ Region Layer::getVisibleRegion(const DisplayDevice* display) const {
     return outputLayer ? outputLayer->getState().visibleRegion : Region();
 }
 
-void Layer::updateCloneBufferInfo() {
-    if (!isClone() || !isClonedFromAlive()) {
-        return;
-    }
-
-    sp<Layer> clonedFrom = getClonedFrom();
-    mBufferInfo = clonedFrom->mBufferInfo;
-    mSidebandStream = clonedFrom->mSidebandStream;
-    surfaceDamageRegion = clonedFrom->surfaceDamageRegion;
-    mCurrentFrameNumber = clonedFrom->mCurrentFrameNumber.load();
-    mPreviousFrameNumber = clonedFrom->mPreviousFrameNumber;
-
-    // After buffer info is updated, the drawingState from the real layer needs to be copied into
-    // the cloned. This is because some properties of drawingState can change when latchBuffer is
-    // called. However, copying the drawingState would also overwrite the cloned layer's relatives
-    // and touchableRegionCrop. Therefore, temporarily store the relatives so they can be set in
-    // the cloned drawingState again.
-    wp<Layer> tmpZOrderRelativeOf = mDrawingState.zOrderRelativeOf;
-    SortedVector<wp<Layer>> tmpZOrderRelatives = mDrawingState.zOrderRelatives;
-    wp<Layer> tmpTouchableRegionCrop = mDrawingState.touchableRegionCrop;
-    WindowInfo tmpInputInfo = mDrawingState.inputInfo;
-
-    cloneDrawingState(clonedFrom.get());
-
-    mDrawingState.touchableRegionCrop = tmpTouchableRegionCrop;
-    mDrawingState.zOrderRelativeOf = tmpZOrderRelativeOf;
-    mDrawingState.zOrderRelatives = tmpZOrderRelatives;
-    mDrawingState.inputInfo = tmpInputInfo;
-}
-
-bool Layer::updateMirrorInfo(const std::deque<Layer*>& cloneRootsPendingUpdates) {
-    if (mClonedChild == nullptr || !mClonedChild->isClonedFromAlive()) {
-        // If mClonedChild is null, there is nothing to mirror. If isClonedFromAlive returns false,
-        // it means that there is a clone, but the layer it was cloned from has been destroyed. In
-        // that case, we want to delete the reference to the clone since we want it to get
-        // destroyed. The root, this layer, will still be around since the client can continue
-        // to hold a reference, but no cloned layers will be displayed.
-        mClonedChild = nullptr;
-        return true;
-    }
-
-    std::map<sp<Layer>, sp<Layer>> clonedLayersMap;
-    // If the real layer exists and is in current state, add the clone as a child of the root.
-    // There's no need to remove from drawingState when the layer is offscreen since currentState is
-    // copied to drawingState for the root layer. So the clonedChild is always removed from
-    // drawingState and then needs to be added back each traversal.
-    mClonedChild->updateClonedDrawingState(clonedLayersMap);
-    mClonedChild->updateClonedChildren(sp<Layer>::fromExisting(this), clonedLayersMap);
-    mClonedChild->updateClonedRelatives(clonedLayersMap);
-
-    for (Layer* root : cloneRootsPendingUpdates) {
-        if (clonedLayersMap.find(sp<Layer>::fromExisting(root)) != clonedLayersMap.end()) {
-            return false;
-        }
-    }
-    return true;
-}
-
-void Layer::updateClonedDrawingState(std::map<sp<Layer>, sp<Layer>>& clonedLayersMap) {
-    // If the layer the clone was cloned from is alive, copy the content of the drawingState
-    // to the clone. If the real layer is no longer alive, continue traversing the children
-    // since we may be able to pull out other children that are still alive.
-    if (isClonedFromAlive()) {
-        sp<Layer> clonedFrom = getClonedFrom();
-        cloneDrawingState(clonedFrom.get());
-        clonedLayersMap.emplace(clonedFrom, sp<Layer>::fromExisting(this));
-    }
-
-    // The clone layer may have children in drawingState since they may have been created and
-    // added from a previous request to updateMirorInfo. This is to ensure we don't recreate clones
-    // that already exist, since we can just re-use them.
-    // The drawingChildren will not get overwritten by the currentChildren since the clones are
-    // not updated in the regular traversal. They are skipped since the root will lose the
-    // reference to them when it copies its currentChildren to drawing.
-    for (sp<Layer>& child : mDrawingChildren) {
-        child->updateClonedDrawingState(clonedLayersMap);
-    }
-}
-
-void Layer::updateClonedChildren(const sp<Layer>& mirrorRoot,
-                                 std::map<sp<Layer>, sp<Layer>>& clonedLayersMap) {
-    mDrawingChildren.clear();
-
-    if (!isClonedFromAlive()) {
-        return;
-    }
-
-    sp<Layer> clonedFrom = getClonedFrom();
-    for (sp<Layer>& child : clonedFrom->mDrawingChildren) {
-        if (child == mirrorRoot) {
-            // This is to avoid cyclical mirroring.
-            continue;
-        }
-        sp<Layer> clonedChild = clonedLayersMap[child];
-        if (clonedChild == nullptr) {
-            clonedChild = child->createClone();
-            clonedLayersMap[child] = clonedChild;
-        }
-        addChildToDrawing(clonedChild);
-        clonedChild->updateClonedChildren(mirrorRoot, clonedLayersMap);
-    }
-}
-
-void Layer::updateClonedInputInfo(const std::map<sp<Layer>, sp<Layer>>& clonedLayersMap) {
-    auto cropLayer = mDrawingState.touchableRegionCrop.promote();
-    if (cropLayer != nullptr) {
-        if (clonedLayersMap.count(cropLayer) == 0) {
-            // Real layer had a crop layer but it's not in the cloned hierarchy. Just set to
-            // self as crop layer to avoid going outside bounds.
-            mDrawingState.touchableRegionCrop = wp<Layer>::fromExisting(this);
-        } else {
-            const sp<Layer>& clonedCropLayer = clonedLayersMap.at(cropLayer);
-            mDrawingState.touchableRegionCrop = clonedCropLayer;
-        }
-    }
-    // Cloned layers shouldn't handle watch outside since their z order is not determined by
-    // WM or the client.
-    mDrawingState.inputInfo.setInputConfig(WindowInfo::InputConfig::WATCH_OUTSIDE_TOUCH, false);
-}
-
-void Layer::updateClonedRelatives(const std::map<sp<Layer>, sp<Layer>>& clonedLayersMap) {
-    mDrawingState.zOrderRelativeOf = wp<Layer>();
-    mDrawingState.zOrderRelatives.clear();
-
-    if (!isClonedFromAlive()) {
-        return;
-    }
-
-    const sp<Layer>& clonedFrom = getClonedFrom();
-    for (wp<Layer>& relativeWeak : clonedFrom->mDrawingState.zOrderRelatives) {
-        const sp<Layer>& relative = relativeWeak.promote();
-        if (clonedLayersMap.count(relative) > 0) {
-            auto& clonedRelative = clonedLayersMap.at(relative);
-            mDrawingState.zOrderRelatives.add(clonedRelative);
-        }
-    }
-
-    // Check if the relativeLayer for the real layer is part of the cloned hierarchy.
-    // It's possible that the layer it's relative to is outside the requested cloned hierarchy.
-    // In that case, we treat the layer as if the relativeOf has been removed. This way, it will
-    // still traverse the children, but the layer with the missing relativeOf will not be shown
-    // on screen.
-    const sp<Layer>& relativeOf = clonedFrom->mDrawingState.zOrderRelativeOf.promote();
-    if (clonedLayersMap.count(relativeOf) > 0) {
-        const sp<Layer>& clonedRelativeOf = clonedLayersMap.at(relativeOf);
-        mDrawingState.zOrderRelativeOf = clonedRelativeOf;
-    }
-
-    updateClonedInputInfo(clonedLayersMap);
-
-    for (sp<Layer>& child : mDrawingChildren) {
-        child->updateClonedRelatives(clonedLayersMap);
-    }
-}
-
-void Layer::addChildToDrawing(const sp<Layer>& layer) {
-    mDrawingChildren.add(layer);
-    layer->mDrawingParent = sp<Layer>::fromExisting(this);
-}
-
 bool Layer::isInternalDisplayOverlay() const {
     const State& s(mDrawingState);
     if (s.flags & layer_state_t::eLayerSkipScreenshot) {
@@ -2128,27 +1940,12 @@ bool Layer::isInternalDisplayOverlay() const {
     return parent && parent->isInternalDisplayOverlay();
 }
 
-void Layer::setClonedChild(const sp<Layer>& clonedChild) {
-    mClonedChild = clonedChild;
-    mHadClonedChild = true;
-    mFlinger->mLayerMirrorRoots.push_back(this);
-}
-
 bool Layer::setDropInputMode(gui::DropInputMode mode) {
     if (mDrawingState.dropInputMode == mode) {
         return false;
     }
     mDrawingState.dropInputMode = mode;
     return true;
-}
-
-void Layer::cloneDrawingState(const Layer* from) {
-    mDrawingState = from->mDrawingState;
-    // Skip callback info since they are not applicable for cloned layers.
-    mDrawingState.releaseBufferListener = nullptr;
-    // TODO (b/238781169) currently broken for mirror layers because we do not
-    // track release fences for mirror layers composed on other displays
-    mDrawingState.callbackHandles = {};
 }
 
 void Layer::callReleaseBufferCallback(const sp<ITransactionCompletedListener>& listener,
@@ -2995,13 +2792,6 @@ Rect Layer::computeBufferCrop(const State& s) {
     } else {
         return s.bufferCrop;
     }
-}
-
-sp<Layer> Layer::createClone() {
-    surfaceflinger::LayerCreationArgs args(mFlinger.get(), nullptr, mName + " (Mirror)", 0,
-                                           LayerMetadata());
-    sp<Layer> layer = mFlinger->getFactory().createBufferStateLayer(args);
-    return layer;
 }
 
 void Layer::decrementPendingBufferCount() {

@@ -2845,9 +2845,7 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
         for (auto [layer, layerFE] : layers) {
             CompositionResult compositionResult{layerFE->stealCompositionResult()};
             for (auto& [releaseFence, layerStack] : compositionResult.releaseFences) {
-                Layer* clonedFrom = layer->getClonedFrom().get();
-                auto owningLayer = clonedFrom ? clonedFrom : layer;
-                owningLayer->onLayerDisplayed(std::move(releaseFence), layerStack);
+                layer->onLayerDisplayed(std::move(releaseFence), layerStack);
             }
             if (compositionResult.lastClientCompositionFence) {
                 layer->setWasClientComposed(compositionResult.lastClientCompositionFence);
@@ -4335,23 +4333,6 @@ void SurfaceFlinger::doCommitTransactions() {
     SFTRACE_CALL();
     mDrawingState = mCurrentState;
     mCurrentState.colorMatrixChanged = false;
-
-    if (mLayerMirrorRoots.size() > 0) {
-        std::deque<Layer*> pendingUpdates;
-        pendingUpdates.insert(pendingUpdates.end(), mLayerMirrorRoots.begin(),
-                              mLayerMirrorRoots.end());
-        std::vector<Layer*> needsUpdating;
-        for (Layer* cloneRoot : mLayerMirrorRoots) {
-            pendingUpdates.pop_front();
-            if (cloneRoot->updateMirrorInfo(pendingUpdates)) {
-            } else {
-                needsUpdating.push_back(cloneRoot);
-            }
-        }
-        for (Layer* cloneRoot : needsUpdating) {
-            cloneRoot->updateMirrorInfo({});
-        }
-    }
 }
 
 void SurfaceFlinger::invalidateLayerStack(const ui::LayerFilter& layerFilter, const Region& dirty) {
@@ -5120,8 +5101,6 @@ status_t SurfaceFlinger::mirrorLayer(const LayerCreationArgs& args,
         if (result != NO_ERROR) {
             return result;
         }
-
-        mirrorLayer->setClonedChild(mirrorFrom->createClone());
     }
 
     outResult.layerId = mirrorLayer->sequence;
@@ -7178,9 +7157,7 @@ void SurfaceFlinger::captureLayers(const LayerCaptureArgs& args,
 void SurfaceFlinger::attachReleaseFenceFutureToLayer(Layer* layer, LayerFE* layerFE,
                                                      ui::LayerStack layerStack) {
     ftl::Future<FenceResult> futureFence = layerFE->createReleaseFenceFuture();
-    Layer* clonedFrom = layer->getClonedFrom().get();
-    auto owningLayer = clonedFrom ? clonedFrom : layer;
-    owningLayer->prepareReleaseCallbacks(std::move(futureFence), layerStack);
+    layer->prepareReleaseCallbacks(std::move(futureFence), layerStack);
 }
 
 // Loop over all visible layers to see whether there's any protected layer. A protected layer is

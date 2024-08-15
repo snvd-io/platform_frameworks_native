@@ -250,8 +250,6 @@ public:
     // true if this layer is visible, false otherwise
     virtual bool isVisible() const;
 
-    virtual sp<Layer> createClone();
-
     // Set a 2x2 transformation matrix on the layer. This transform
     // will be applied after parent transforms, but before any final
     // producer specified transform.
@@ -423,7 +421,6 @@ public:
 
     // from graphics API
     static ui::Dataspace translateDataspace(ui::Dataspace dataspace);
-    void updateCloneBufferInfo();
     uint64_t mPreviousFrameNumber = 0;
 
     void onCompositionPresented(const DisplayDevice*,
@@ -652,8 +649,6 @@ public:
 
     gui::WindowInfo::Type getWindowType() const { return mWindowType; }
 
-    bool updateMirrorInfo(const std::deque<Layer*>& cloneRootsPendingUpdates);
-
     /*
      * doTransaction - process the transaction. This is a good place to figure
      * out which attributes of the surface have changed.
@@ -754,15 +749,6 @@ public:
 
     int32_t getOwnerAppId() { return mOwnerAppId; }
 
-    // This layer is not a clone, but it's the parent to the cloned hierarchy. The
-    // variable mClonedChild represents the top layer that will be cloned so this
-    // layer will be the parent of mClonedChild.
-    // The layers in the cloned hierarchy will match the lifetime of the real layers. That is
-    // if the real layer is destroyed, then the clone layer will also be destroyed.
-    sp<Layer> mClonedChild;
-    bool mHadClonedChild = false;
-    void setClonedChild(const sp<Layer>& mClonedChild);
-
     mutable bool contentDirty{false};
     Region surfaceDamageRegion;
 
@@ -807,10 +793,6 @@ public:
     // CompositionEngine to create a single path for composing layers.
     void updateSnapshot(bool updateGeometry);
     void updateChildrenSnapshots(bool updateGeometry);
-    sp<Layer> getClonedFrom() const {
-        return mClonedFrom != nullptr ? mClonedFrom.promote() : nullptr;
-    }
-    bool isClone() { return mClonedFrom != nullptr; }
 
     bool willPresentCurrentTransaction() const;
 
@@ -875,16 +857,6 @@ protected:
     void preparePerFrameBufferCompositionState();
     void preparePerFrameEffectsCompositionState();
     void gatherBufferInfo();
-
-    bool isClonedFromAlive() { return getClonedFrom() != nullptr; }
-
-    void cloneDrawingState(const Layer* from);
-    void updateClonedDrawingState(std::map<sp<Layer>, sp<Layer>>& clonedLayersMap);
-    void updateClonedChildren(const sp<Layer>& mirrorRoot,
-                              std::map<sp<Layer>, sp<Layer>>& clonedLayersMap);
-    void updateClonedRelatives(const std::map<sp<Layer>, sp<Layer>>& clonedLayersMap);
-    void addChildToDrawing(const sp<Layer>&);
-    void updateClonedInputInfo(const std::map<sp<Layer>, sp<Layer>>& clonedLayersMap);
 
     void prepareBasicGeometryCompositionState();
     void prepareGeometryCompositionState();
@@ -1024,10 +996,6 @@ private:
     gui::DropInputMode getDropInputMode() const;
     void handleDropInputMode(gui::WindowInfo& info) const;
 
-    // Find the root of the cloned hierarchy, this means the first non cloned parent.
-    // This will return null if first non cloned parent is not found.
-    sp<Layer> getClonedRoot();
-
     // Finds the top most layer in the hierarchy. This will find the root Layer where the parent is
     // null.
     sp<Layer> getRootLayer();
@@ -1101,12 +1069,6 @@ private:
     FloatRect mScreenBounds;
 
     bool mGetHandleCalled = false;
-
-    // The current layer is a clone of mClonedFrom. This means that this layer will update it's
-    // properties based on mClonedFrom. When mClonedFrom latches a new buffer for BufferLayers,
-    // this layer will update it's buffer. When mClonedFrom updates it's drawing state, children,
-    // and relatives, this layer will update as well.
-    wp<Layer> mClonedFrom;
 
     // The inherited shadow radius after taking into account the layer hierarchy. This is the
     // final shadow radius for this layer. If a shadow is specified for a layer, then effective
