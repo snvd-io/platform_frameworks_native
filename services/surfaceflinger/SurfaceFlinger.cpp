@@ -3932,51 +3932,6 @@ void SurfaceFlinger::commitTransactionsLocked(uint32_t transactionFlags) {
         mUpdateInputInfo = true;
     }
 
-    // Update transform hint.
-    if (transactionFlags & (eTransformHintUpdateNeeded | eDisplayTransactionNeeded)) {
-        // Layers and/or displays have changed, so update the transform hint for each layer.
-        //
-        // NOTE: we do this here, rather than when presenting the display so that
-        // the hint is set before we acquire a buffer from the surface texture.
-        //
-        // NOTE: layer transactions have taken place already, so we use their
-        // drawing state. However, SurfaceFlinger's own transaction has not
-        // happened yet, so we must use the current state layer list
-        // (soon to become the drawing state list).
-        //
-        sp<const DisplayDevice> hintDisplay;
-        ui::LayerStack layerStack;
-
-        mCurrentState.traverse([&](Layer* layer) REQUIRES(mStateLock) {
-            // NOTE: we rely on the fact that layers are sorted by
-            // layerStack first (so we don't have to traverse the list
-            // of displays for every layer).
-            if (const auto filter = layer->getOutputFilter(); layerStack != filter.layerStack) {
-                layerStack = filter.layerStack;
-                hintDisplay = nullptr;
-
-                // Find the display that includes the layer.
-                for (const auto& [token, display] : mDisplays) {
-                    if (!display->getCompositionDisplay()->includesLayer(filter)) {
-                        continue;
-                    }
-
-                    // Pick the primary display if another display mirrors the layer.
-                    if (hintDisplay) {
-                        hintDisplay = nullptr;
-                        break;
-                    }
-
-                    hintDisplay = display;
-                }
-            }
-
-            if (hintDisplay) {
-                layer->updateTransformHint(hintDisplay->getTransformHint());
-            }
-        });
-    }
-
     if (mLayersAdded) {
         mLayersAdded = false;
         // Layers have been added.
@@ -4493,7 +4448,6 @@ status_t SurfaceFlinger::addClientLayer(LayerCreationArgs& args, const sp<IBinde
         return NO_MEMORY;
     }
 
-    layer->updateTransformHint(mActiveDisplayTransformHint);
     if (outTransformHint) {
         *outTransformHint = mActiveDisplayTransformHint;
     }
@@ -8142,20 +8096,6 @@ void SurfaceFlinger::handleLayerCreatedLocked(const LayerCreatedState& state, Vs
         layer->onRemovedFromCurrentState();
     } else {
         parent->addChild(layer);
-    }
-
-    ui::LayerStack layerStack = layer->getLayerStack(LayerVector::StateSet::Current);
-    sp<const DisplayDevice> hintDisplay;
-    // Find the display that includes the layer.
-    for (const auto& [token, display] : mDisplays) {
-        if (display->getLayerStack() == layerStack) {
-            hintDisplay = display;
-            break;
-        }
-    }
-
-    if (hintDisplay) {
-        layer->updateTransformHint(hintDisplay->getTransformHint());
     }
 }
 
