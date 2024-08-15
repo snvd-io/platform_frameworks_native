@@ -2520,12 +2520,18 @@ bool SurfaceFlinger::updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs,
     }
 
     updateLayerHistory(latchTime);
-    mLayerSnapshotBuilder.forEachVisibleSnapshot([&](const frontend::LayerSnapshot& snapshot) {
-        if (mLayersIdsWithQueuedFrames.find(snapshot.path.id) == mLayersIdsWithQueuedFrames.end())
-            return;
-        Region visibleReg;
-        visibleReg.set(snapshot.transformedBoundsWithoutTransparentRegion);
-        invalidateLayerStack(snapshot.outputFilter, visibleReg);
+    mLayerSnapshotBuilder.forEachSnapshot([&](const frontend::LayerSnapshot& snapshot) {
+        // update output dirty region if we have a queued buffer that is visible or a snapshot
+        // recently became invisible
+        // TODO(b/360050020) investigate if we need to update dirty region when layer color changes
+        if ((snapshot.isVisible &&
+             (mLayersIdsWithQueuedFrames.find(snapshot.path.id) !=
+              mLayersIdsWithQueuedFrames.end())) ||
+            (!snapshot.isVisible && snapshot.changes.test(Changes::Visibility))) {
+            Region visibleReg;
+            visibleReg.set(snapshot.transformedBoundsWithoutTransparentRegion);
+            invalidateLayerStack(snapshot.outputFilter, visibleReg);
+        }
     });
 
     for (auto& destroyedLayer : mLayerLifecycleManager.getDestroyedLayers()) {
@@ -3984,14 +3990,6 @@ void SurfaceFlinger::commitTransactionsLocked(uint32_t transactionFlags) {
         mLayersRemoved = false;
         mVisibleRegionsDirty = true;
         mUpdateInputInfo = true;
-        mDrawingState.traverseInZOrder([&](Layer* layer) {
-            if (mLayersPendingRemoval.indexOf(sp<Layer>::fromExisting(layer)) >= 0) {
-                // this layer is not visible anymore
-                Region visibleReg;
-                visibleReg.set(layer->getScreenBounds());
-                invalidateLayerStack(layer->getOutputFilter(), visibleReg);
-            }
-        });
     }
 
     if (transactionFlags & eInputInfoUpdateNeeded) {
