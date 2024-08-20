@@ -93,8 +93,7 @@ void LegacyResampler::updateLatestSamples(const MotionEvent& motionEvent) {
                     Pointer{*motionEvent.getPointerProperties(pointerIndex), pointerCoords});
         }
         mLatestSamples.pushBack(
-                Sample{static_cast<nanoseconds>(motionEvent.getHistoricalEventTime(sampleIndex)),
-                       pointers});
+                Sample{nanoseconds{motionEvent.getHistoricalEventTime(sampleIndex)}, pointers});
     }
 }
 
@@ -104,7 +103,7 @@ LegacyResampler::Sample LegacyResampler::messageToSample(const InputMessage& mes
         pointers.push_back(Pointer{message.body.motion.pointers[i].properties,
                                    message.body.motion.pointers[i].coords});
     }
-    return Sample{static_cast<nanoseconds>(message.body.motion.eventTime), pointers};
+    return Sample{nanoseconds{message.body.motion.eventTime}, pointers};
 }
 
 bool LegacyResampler::pointerPropertiesResampleable(const Sample& target, const Sample& auxiliary) {
@@ -162,7 +161,7 @@ std::optional<LegacyResampler::Sample> LegacyResampler::attemptInterpolation(
     const Sample& pastSample = *(mLatestSamples.end() - 1);
 
     const nanoseconds delta =
-            static_cast<nanoseconds>(futureSample.body.motion.eventTime) - pastSample.eventTime;
+            nanoseconds{futureSample.body.motion.eventTime} - pastSample.eventTime;
     const float alpha =
             std::chrono::duration<float, std::milli>(resampleTime - pastSample.eventTime) / delta;
 
