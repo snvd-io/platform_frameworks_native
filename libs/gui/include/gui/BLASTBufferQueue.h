@@ -187,15 +187,6 @@ private:
     // BufferQueue internally allows 1 more than
     // the max to be acquired
     int32_t mMaxAcquiredBuffers GUARDED_BY(mMutex) = 1;
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(BUFFER_RELEASE_CHANNEL)
-    int32_t mMaxDequeuedBuffers GUARDED_BY(mMutex) = 1;
-    static constexpr int32_t kMaxBufferCount = BufferQueueDefs::NUM_BUFFER_SLOTS;
-
-    bool mAsyncMode GUARDED_BY(mMutex) = false;
-    bool mSharedBufferMode GUARDED_BY(mMutex) = false;
-
-    int32_t mNumDequeued GUARDED_BY(mMutex) = 0;
-#endif
     int32_t mNumFrameAvailable GUARDED_BY(mMutex) = 0;
     int32_t mNumAcquired GUARDED_BY(mMutex) = 0;
 
@@ -204,16 +195,9 @@ private:
     // latch stale buffers and that we don't wait on barriers from an old producer.
     uint32_t mProducerId = 0;
 
-    class BLASTBufferItem : public BufferItem {
-    public:
-        // True if BBQBufferQueueProducer is disconnected after the buffer is acquried but
-        // before it is released.
-        bool disconnectedAfterAcquired{false};
-    };
-
     // Keep a reference to the submitted buffers so we can release when surfaceflinger drops the
     // buffer or the buffer has been presented and a new buffer is ready to be presented.
-    std::unordered_map<ReleaseCallbackId, BLASTBufferItem, ReleaseBufferCallbackIdHash> mSubmitted
+    std::unordered_map<ReleaseCallbackId, BufferItem, ReleaseBufferCallbackIdHash> mSubmitted
             GUARDED_BY(mMutex);
 
     // Keep a queue of the released buffers instead of immediately releasing
