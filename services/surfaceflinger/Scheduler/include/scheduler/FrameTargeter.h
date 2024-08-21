@@ -106,8 +106,7 @@ protected:
         FenceTimePtr fenceTime = FenceTime::NO_FENCE;
         TimePoint expectedPresentTime = TimePoint();
     };
-    // size should be longest sf-duration / shortest vsync period and round up
-    std::array<FenceWithFenceTime, 5> mPresentFences; // currently consider 166hz.
+    std::array<FenceWithFenceTime, 2> mPresentFences;
     utils::RingBuffer<FenceWithFenceTime, 5> mFenceWithFenceTimes;
 
     TimePoint mLastSignaledFrameTime;
