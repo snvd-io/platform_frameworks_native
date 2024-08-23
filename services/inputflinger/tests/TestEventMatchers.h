@@ -646,12 +646,51 @@ MATCHER_P2(WithCursorPosition, x, y, "InputEvent with specified cursor position"
     return (isnan(x) ? isnan(argX) : x == argX) && (isnan(y) ? isnan(argY) : y == argY);
 }
 
-MATCHER_P2(WithRelativeMotion, x, y, "InputEvent with specified relative motion") {
-    const auto argX = arg.pointerCoords[0].getAxisValue(AMOTION_EVENT_AXIS_RELATIVE_X);
-    const auto argY = arg.pointerCoords[0].getAxisValue(AMOTION_EVENT_AXIS_RELATIVE_Y);
-    *result_listener << "expected relative motion (" << x << ", " << y << "), but got (" << argX
-                     << ", " << argY << ")";
-    return argX == x && argY == y;
+/// Relative motion matcher
+class WithRelativeMotionMatcher {
+public:
+    using is_gtest_matcher = void;
+    explicit WithRelativeMotionMatcher(size_t pointerIndex, float relX, float relY)
+          : mPointerIndex(pointerIndex), mRelX(relX), mRelY(relY) {}
+
+    bool MatchAndExplain(const NotifyMotionArgs& event, std::ostream* os) const {
+        if (mPointerIndex >= event.pointerCoords.size()) {
+            *os << "Pointer index " << mPointerIndex << " is out of bounds";
+            return false;
+        }
+
+        const PointerCoords& coords = event.pointerCoords[mPointerIndex];
+        bool matches = mRelX == coords.getAxisValue(AMOTION_EVENT_AXIS_RELATIVE_X) &&
+                mRelY == coords.getAxisValue(AMOTION_EVENT_AXIS_RELATIVE_Y);
+        if (!matches) {
+            *os << "expected relative motion (" << mRelX << ", " << mRelY << ") at pointer index "
+                << mPointerIndex << ", but got ("
+                << coords.getAxisValue(AMOTION_EVENT_AXIS_RELATIVE_X) << ", "
+                << coords.getAxisValue(AMOTION_EVENT_AXIS_RELATIVE_Y) << ")";
+        }
+        return matches;
+    }
+
+    void DescribeTo(std::ostream* os) const {
+        *os << "with relative motion (" << mRelX << ", " << mRelY << ") at pointer index "
+            << mPointerIndex;
+    }
+
+    void DescribeNegationTo(std::ostream* os) const { *os << "wrong relative motion"; }
+
+private:
+    const size_t mPointerIndex;
+    const float mRelX;
+    const float mRelY;
+};
+
+inline WithRelativeMotionMatcher WithRelativeMotion(float relX, float relY) {
+    return WithRelativeMotionMatcher(0, relX, relY);
+}
+
+inline WithRelativeMotionMatcher WithPointerRelativeMotion(size_t pointerIndex, float relX,
+                                                           float relY) {
+    return WithRelativeMotionMatcher(pointerIndex, relX, relY);
 }
 
 MATCHER_P3(WithGestureOffset, dx, dy, epsilon,
