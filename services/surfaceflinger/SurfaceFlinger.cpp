@@ -6796,7 +6796,7 @@ void SurfaceFlinger::dumpOffscreenLayers(std::string& result) {
 }
 
 void SurfaceFlinger::dumpHwcLayersMinidumpLockedLegacy(std::string& result) const {
-    for (const auto& [token, display] : FTL_FAKE_GUARD(mStateLock, mDisplays)) {
+    for (const auto& [token, display] : mDisplays) {
         const auto displayId = HalDisplayId::tryCast(display->getId());
         if (!displayId) {
             continue;
@@ -6816,7 +6816,7 @@ void SurfaceFlinger::dumpHwcLayersMinidump(std::string& result) const {
     if (!mLayerLifecycleManagerEnabled) {
         return dumpHwcLayersMinidumpLockedLegacy(result);
     }
-    for (const auto& [token, display] : FTL_FAKE_GUARD(mStateLock, mDisplays)) {
+    for (const auto& [token, display] : mDisplays) {
         const auto displayId = HalDisplayId::tryCast(display->getId());
         if (!displayId) {
             continue;
