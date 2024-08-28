@@ -2371,7 +2371,7 @@ bool SurfaceFlinger::updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs,
         {
             // TODO(b/238781169) lockless queue this and keep order.
             std::scoped_lock<std::mutex> lock(mCreatedLayersLock);
-            update.layerCreatedStates = std::move(mCreatedLayers);
+            update.legacyLayers = std::move(mCreatedLayers);
             mCreatedLayers.clear();
             update.newLayers = std::move(mNewLayers);
             mNewLayers.clear();
@@ -2390,11 +2390,8 @@ bool SurfaceFlinger::updateLayerSnapshots(VsyncId vsyncId, nsecs_t frameTimeNs,
         }
         mLayerLifecycleManager.applyTransactions(update.transactions);
         mLayerLifecycleManager.onHandlesDestroyed(update.destroyedHandles);
-        for (auto& legacyLayer : update.layerCreatedStates) {
-            sp<Layer> layer = legacyLayer.layer.promote();
-            if (layer) {
-                mLegacyLayers[layer->sequence] = layer;
-            }
+        for (auto& legacyLayer : update.legacyLayers) {
+            mLegacyLayers[legacyLayer->sequence] = legacyLayer;
         }
         mLayerHierarchyBuilder.update(mLayerLifecycleManager);
     }
@@ -4336,35 +4333,8 @@ void SurfaceFlinger::initScheduler(const sp<const DisplayDevice>& display) {
 
 void SurfaceFlinger::doCommitTransactions() {
     SFTRACE_CALL();
-
-    if (!mLayersPendingRemoval.isEmpty()) {
-        // Notify removed layers now that they can't be drawn from
-        for (const auto& l : mLayersPendingRemoval) {
-            // Ensure any buffers set to display on any children are released.
-            if (l->isRemovedFromCurrentState()) {
-                l->latchAndReleaseBuffer();
-            }
-
-            // If a layer has a parent, we allow it to out-live it's handle
-            // with the idea that the parent holds a reference and will eventually
-            // be cleaned up. However no one cleans up the top-level so we do so
-            // here.
-            if (l->isAtRoot()) {
-                l->setIsAtRoot(false);
-                mCurrentState.layersSortedByZ.remove(l);
-            }
-        }
-        mLayersPendingRemoval.clear();
-    }
-
     mDrawingState = mCurrentState;
     mCurrentState.colorMatrixChanged = false;
-
-    if (mVisibleRegionsDirty) {
-        for (const auto& rootLayer : mDrawingState.layersSortedByZ) {
-            rootLayer->commitChildList();
-        }
-    }
 
     if (mLayerMirrorRoots.size() > 0) {
         std::deque<Layer*> pendingUpdates;
@@ -4373,9 +4343,6 @@ void SurfaceFlinger::doCommitTransactions() {
         std::vector<Layer*> needsUpdating;
         for (Layer* cloneRoot : mLayerMirrorRoots) {
             pendingUpdates.pop_front();
-            if (cloneRoot->isRemovedFromCurrentState()) {
-                continue;
-            }
             if (cloneRoot->updateMirrorInfo(pendingUpdates)) {
             } else {
                 needsUpdating.push_back(cloneRoot);
@@ -4427,7 +4394,7 @@ status_t SurfaceFlinger::addClientLayer(LayerCreationArgs& args, const sp<IBinde
     args.layerIdToMirror = LayerHandle::getLayerId(args.mirrorLayerHandle.promote());
     {
         std::scoped_lock<std::mutex> lock(mCreatedLayersLock);
-        mCreatedLayers.emplace_back(layer, parent, args.addToRoot);
+        mCreatedLayers.emplace_back(layer);
         mNewLayers.emplace_back(std::make_unique<frontend::RequestedLayerState>(args));
         args.mirrorLayerHandle.clear();
         args.parentHandle.clear();
@@ -5268,33 +5235,22 @@ status_t SurfaceFlinger::createEffectLayer(const LayerCreationArgs& args, sp<IBi
     return NO_ERROR;
 }
 
-void SurfaceFlinger::markLayerPendingRemovalLocked(const sp<Layer>& layer) {
-    mLayersPendingRemoval.add(layer);
-    mLayersRemoved = true;
-    setTransactionFlags(eTransactionNeeded);
-}
-
 void SurfaceFlinger::onHandleDestroyed(BBinder* handle, sp<Layer>& layer, uint32_t layerId) {
-    {
-        std::scoped_lock<std::mutex> lock(mCreatedLayersLock);
-        mDestroyedHandles.emplace_back(layerId, layer->getDebugName());
-    }
-
     {
         // Used to remove stalled transactions which uses an internal lock.
         ftl::FakeGuard guard(kMainThreadContext);
         mTransactionHandler.onLayerDestroyed(layerId);
     }
-
     JankTracker::flushJankData(layerId);
 
-    Mutex::Autolock lock(mStateLock);
-    markLayerPendingRemovalLocked(layer);
+    std::scoped_lock<std::mutex> lock(mCreatedLayersLock);
+    mDestroyedHandles.emplace_back(layerId, layer->getDebugName());
+
+    Mutex::Autolock stateLock(mStateLock);
     layer->onHandleDestroyed();
     mBufferCountTracker.remove(handle);
     layer.clear();
-
-    setTransactionFlags(eTransactionFlushNeeded);
+    setTransactionFlags(eTransactionFlushNeeded | eTransactionNeeded);
 }
 
 void SurfaceFlinger::initializeDisplays() {
@@ -7692,18 +7648,6 @@ void SurfaceFlinger::traverseLegacyLayers(const LayerVector::Visitor& visitor) c
 
 // ---------------------------------------------------------------------------
 
-void SurfaceFlinger::State::traverse(const LayerVector::Visitor& visitor) const {
-    layersSortedByZ.traverse(visitor);
-}
-
-void SurfaceFlinger::State::traverseInZOrder(const LayerVector::Visitor& visitor) const {
-    layersSortedByZ.traverseInZOrder(stateSet, visitor);
-}
-
-void SurfaceFlinger::State::traverseInReverseZOrder(const LayerVector::Visitor& visitor) const {
-    layersSortedByZ.traverseInReverseZOrder(stateSet, visitor);
-}
-
 ftl::Optional<scheduler::FrameRateMode> SurfaceFlinger::getPreferredDisplayMode(
         PhysicalDisplayId displayId, DisplayModeId defaultModeId) const {
     if (const auto schedulerMode = mScheduler->getPreferredDisplayMode();
@@ -7872,16 +7816,12 @@ status_t SurfaceFlinger::getDesiredDisplayModeSpecs(const sp<IBinder>& displayTo
 
 void SurfaceFlinger::onLayerFirstRef(Layer* layer) {
     mNumLayers++;
-    if (!layer->isRemovedFromCurrentState()) {
-        mScheduler->registerLayer(layer, scheduler::FrameRateCompatibility::Default);
-    }
+    mScheduler->registerLayer(layer, scheduler::FrameRateCompatibility::Default);
 }
 
 void SurfaceFlinger::onLayerDestroyed(Layer* layer) {
     mNumLayers--;
-    if (!layer->isRemovedFromCurrentState()) {
-        mScheduler->deregisterLayer(layer);
-    }
+    mScheduler->deregisterLayer(layer);
     if (mTransactionTracing) {
         mTransactionTracing->onLayerRemoved(layer->getSequence());
     }
@@ -8032,37 +7972,6 @@ int SurfaceFlinger::getMaxAcquiredBufferCountForRefreshRate(Fps refreshRate) con
             mScheduler->getVsyncConfiguration().getConfigsForRefreshRate(refreshRate).late;
     const auto presentLatency = vsyncConfig.appWorkDuration + vsyncConfig.sfWorkDuration;
     return calculateMaxAcquiredBufferCount(refreshRate, presentLatency);
-}
-
-void SurfaceFlinger::handleLayerCreatedLocked(const LayerCreatedState& state, VsyncId vsyncId) {
-    sp<Layer> layer = state.layer.promote();
-    if (!layer) {
-        ALOGD("Layer was destroyed soon after creation %p", state.layer.unsafe_get());
-        return;
-    }
-    MUTEX_ALIAS(mStateLock, layer->mFlinger->mStateLock);
-
-    sp<Layer> parent;
-    bool addToRoot = state.addToRoot;
-    if (state.initialParent != nullptr) {
-        parent = state.initialParent.promote();
-        if (parent == nullptr) {
-            ALOGD("Parent was destroyed soon after creation %p", state.initialParent.unsafe_get());
-            addToRoot = false;
-        }
-    }
-
-    if (parent == nullptr && addToRoot) {
-        layer->setIsAtRoot(true);
-        mCurrentState.layersSortedByZ.add(layer);
-    } else if (parent == nullptr) {
-        layer->onRemovedFromCurrentState();
-    } else if (parent->isRemovedFromCurrentState()) {
-        parent->addChild(layer);
-        layer->onRemovedFromCurrentState();
-    } else {
-        parent->addChild(layer);
-    }
 }
 
 void SurfaceFlinger::sample() {
