@@ -17,6 +17,10 @@
 
 #include <cstring>
 
+#include <android-base/parsedouble.h>
+#include <android-base/properties.h>
+#include <android-base/thread_annotations.h>
+
 #include <android_os_vibrator.h>
 
 #include <algorithm>
@@ -33,6 +37,21 @@ static constexpr float HAPTIC_SCALE_LOW_RATIO = 3.0f / 4.0f;
 static constexpr float HAPTIC_MAX_AMPLITUDE_FLOAT = 1.0f;
 static constexpr float SCALE_GAMMA = 0.65f; // Same as VibrationEffect.SCALE_GAMMA
 static constexpr float SCALE_LEVEL_GAIN = 1.4f; // Same as VibrationConfig.DEFAULT_SCALE_LEVEL_GAIN
+
+float getScaleLevelGain() {
+    static std::mutex gMutex;
+    static float gScaleLevelGain GUARDED_BY(gMutex) = 0;
+    std::lock_guard lock(gMutex);
+    if (gScaleLevelGain != 0) {
+        return gScaleLevelGain;
+    }
+    float scaleGain;
+    std::string value = ::android::base::GetProperty("vendor.vibrator.scale.level.gain", "");
+    if (value.empty() || !::android::base::ParseFloat(value, &scaleGain) || scaleGain <= 1) {
+        scaleGain = SCALE_LEVEL_GAIN;
+    }
+    return gScaleLevelGain = scaleGain;
+}
 
 float getOldHapticScaleGamma(HapticLevel level) {
     switch (level) {
@@ -79,7 +98,8 @@ float getHapticScaleFactor(HapticScale scale) {
             case HapticLevel::NONE:
                 return 1.0f;
             default:
-                float scaleFactor = powf(SCALE_LEVEL_GAIN, static_cast<int32_t>(level));
+                float scaleLevelGain = getScaleLevelGain();
+                float scaleFactor = powf(scaleLevelGain, static_cast<int32_t>(level));
                 if (scaleFactor <= 0) {
                     ALOGE("Invalid scale factor %.2f for level %d, using fallback to 1.0",
                           scaleFactor, static_cast<int32_t>(level));
