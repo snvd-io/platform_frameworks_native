@@ -60,6 +60,21 @@ uint32_t gesturesButtonToMotionEventButton(uint32_t gesturesButton) {
     }
 }
 
+bool isGestureNoFocusChange(MotionClassification classification) {
+    switch (classification) {
+        case MotionClassification::TWO_FINGER_SWIPE:
+        case MotionClassification::MULTI_FINGER_SWIPE:
+        case MotionClassification::PINCH:
+            // Most gestures can be performed on an unfocused window, so they should not
+            // not affect window focus.
+            return true;
+        case MotionClassification::NONE:
+        case MotionClassification::AMBIGUOUS_GESTURE:
+        case MotionClassification::DEEP_PRESS:
+            return false;
+    }
+}
+
 } // namespace
 
 GestureConverter::GestureConverter(InputReaderContext& readerContext,
@@ -67,6 +82,7 @@ GestureConverter::GestureConverter(InputReaderContext& readerContext,
       : mDeviceId(deviceId),
         mReaderContext(readerContext),
         mEnableFlingStop(input_flags::enable_touchpad_fling_stop()),
+        mEnableNoFocusChange(input_flags::enable_touchpad_no_focus_change()),
         // We can safely assume that ABS_MT_POSITION_X and _Y axes will be available, as EventHub
         // won't classify a device as a touchpad if they're not present.
         mXAxisInfo(deviceContext.getAbsoluteAxisInfo(ABS_MT_POSITION_X).value()),
@@ -624,6 +640,14 @@ NotifyMotionArgs GestureConverter::makeMotionArgs(nsecs_t when, nsecs_t readTime
                                                   int32_t actionButton, int32_t buttonState,
                                                   uint32_t pointerCount,
                                                   const PointerCoords* pointerCoords) {
+    int32_t flags = 0;
+    if (action == AMOTION_EVENT_ACTION_CANCEL) {
+        flags |= AMOTION_EVENT_FLAG_CANCELED;
+    }
+    if (mEnableNoFocusChange && isGestureNoFocusChange(mCurrentClassification)) {
+        flags |= AMOTION_EVENT_FLAG_NO_FOCUS_CHANGE;
+    }
+
     return {mReaderContext.getNextId(),
             when,
             readTime,
@@ -633,7 +657,7 @@ NotifyMotionArgs GestureConverter::makeMotionArgs(nsecs_t when, nsecs_t readTime
             /* policyFlags= */ POLICY_FLAG_WAKE,
             action,
             /* actionButton= */ actionButton,
-            /* flags= */ action == AMOTION_EVENT_ACTION_CANCEL ? AMOTION_EVENT_FLAG_CANCELED : 0,
+            flags,
             mReaderContext.getGlobalMetaState(),
             buttonState,
             mCurrentClassification,
