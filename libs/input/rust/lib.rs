@@ -23,6 +23,7 @@ pub use input::{DeviceId, MotionAction, MotionFlags, Source};
 pub use input_verifier::InputVerifier;
 
 #[cxx::bridge(namespace = "android::input")]
+#[allow(clippy::needless_maybe_sized)]
 #[allow(unsafe_op_in_unsafe_fn)]
 mod ffi {
     #[namespace = "android"]
