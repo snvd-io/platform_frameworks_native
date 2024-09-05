@@ -44,7 +44,7 @@
 
 #include "gpuwork/gpuWork.h"
 
-#define ONE_MS_IN_NS (10000000)
+#define MSEC_PER_NSEC (1000LU * 1000LU)
 
 namespace android {
 namespace gpuwork {
@@ -404,8 +404,8 @@ AStatsManager_PullAtomCallbackReturn GpuWork::pullWorkAtoms(AStatsEventList* dat
             }
             const UidTrackingInfo& info = it->second;
 
-            uint64_t total_active_duration_ms = info.total_active_duration_ns / ONE_MS_IN_NS;
-            uint64_t total_inactive_duration_ms = info.total_inactive_duration_ns / ONE_MS_IN_NS;
+            uint64_t total_active_duration_ms = info.total_active_duration_ns / MSEC_PER_NSEC;
+            uint64_t total_inactive_duration_ms = info.total_inactive_duration_ns / MSEC_PER_NSEC;
 
             // Skip this atom if any numbers are out of range. |duration| is
             // already checked above.
