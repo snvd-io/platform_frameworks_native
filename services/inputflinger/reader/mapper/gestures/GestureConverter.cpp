@@ -354,7 +354,6 @@ std::list<NotifyArgs> GestureConverter::handleScroll(nsecs_t when, nsecs_t readT
         NotifyMotionArgs args =
                 makeMotionArgs(when, readTime, AMOTION_EVENT_ACTION_DOWN, /* actionButton= */ 0,
                                mButtonState, /* pointerCount= */ 1, mFakeFingerCoords.data());
-        args.flags |= AMOTION_EVENT_FLAG_IS_GENERATED_GESTURE;
         out.push_back(args);
     }
     float deltaX = gesture.details.scroll.dx;
@@ -369,7 +368,6 @@ std::list<NotifyArgs> GestureConverter::handleScroll(nsecs_t when, nsecs_t readT
     NotifyMotionArgs args =
             makeMotionArgs(when, readTime, AMOTION_EVENT_ACTION_MOVE, /* actionButton= */ 0,
                            mButtonState, /* pointerCount= */ 1, mFakeFingerCoords.data());
-    args.flags |= AMOTION_EVENT_FLAG_IS_GENERATED_GESTURE;
     out.push_back(args);
     return out;
 }
@@ -443,7 +441,6 @@ std::list<NotifyArgs> GestureConverter::endScroll(nsecs_t when, nsecs_t readTime
     NotifyMotionArgs args =
             makeMotionArgs(when, readTime, AMOTION_EVENT_ACTION_UP, /* actionButton= */ 0,
                            mButtonState, /* pointerCount= */ 1, mFakeFingerCoords.data());
-    args.flags |= AMOTION_EVENT_FLAG_IS_GENERATED_GESTURE;
     out.push_back(args);
     mCurrentClassification = MotionClassification::NONE;
     out += enterHover(when, readTime);
@@ -646,6 +643,10 @@ NotifyMotionArgs GestureConverter::makeMotionArgs(nsecs_t when, nsecs_t readTime
     }
     if (mEnableNoFocusChange && isGestureNoFocusChange(mCurrentClassification)) {
         flags |= AMOTION_EVENT_FLAG_NO_FOCUS_CHANGE;
+    }
+    if (mCurrentClassification == MotionClassification::TWO_FINGER_SWIPE) {
+        // This helps to make GestureDetector responsive.
+        flags |= AMOTION_EVENT_FLAG_IS_GENERATED_GESTURE;
     }
 
     return {mReaderContext.getNextId(),
