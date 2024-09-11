@@ -90,7 +90,6 @@ cc_library {
     ],
 
     shared_libs: [
-        "libbase",
         "liblog",
         "libutils",
         "server_configurable_flags",
