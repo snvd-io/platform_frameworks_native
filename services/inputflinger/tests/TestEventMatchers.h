@@ -615,7 +615,12 @@ public:
     explicit WithPointerIdMatcher(size_t index, int32_t pointerId)
           : mIndex(index), mPointerId(pointerId) {}
 
-    bool MatchAndExplain(const NotifyMotionArgs& args, std::ostream*) const {
+    bool MatchAndExplain(const NotifyMotionArgs& args, std::ostream* os) const {
+        if (mIndex >= args.pointerCoords.size()) {
+            *os << "Pointer index " << mIndex << " is out of bounds";
+            return false;
+        }
+
         return args.pointerProperties[mIndex].id == mPointerId;
     }
 
@@ -797,10 +802,14 @@ MATCHER_P(WithToolType, toolType, "InputEvent with specified tool type") {
     return argToolType == toolType;
 }
 
-MATCHER_P2(WithPointerToolType, pointer, toolType,
+MATCHER_P2(WithPointerToolType, pointerIndex, toolType,
            "InputEvent with specified tool type for pointer") {
-    const auto argToolType = arg.pointerProperties[pointer].toolType;
-    *result_listener << "expected pointer " << pointer << " to have tool type "
+    if (std::cmp_greater_equal(pointerIndex, arg.getPointerCount())) {
+        *result_listener << "Pointer index " << pointerIndex << " is out of bounds";
+        return false;
+    }
+    const auto argToolType = arg.pointerProperties[pointerIndex].toolType;
+    *result_listener << "expected pointer " << pointerIndex << " to have tool type "
                      << ftl::enum_string(toolType) << ", but got " << ftl::enum_string(argToolType);
     return argToolType == toolType;
 }
