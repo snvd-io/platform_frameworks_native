@@ -18,7 +18,6 @@
 
 #include <android/binder_ibinder.h>
 #include <android/binder_status.h>
-#include <android/llndk-versioning.h>
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
