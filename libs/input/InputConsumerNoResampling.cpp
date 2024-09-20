@@ -46,27 +46,6 @@ using std::chrono::nanoseconds;
 const bool DEBUG_TRANSPORT_CONSUMER =
         __android_log_is_loggable(ANDROID_LOG_DEBUG, LOG_TAG "Consumer", ANDROID_LOG_INFO);
 
-/**
- * RealLooper is a wrapper of Looper. All the member functions exclusively call the internal looper.
- * This class' behavior is the same as Looper.
- */
-class RealLooper final : public LooperInterface {
-public:
-    RealLooper(sp<Looper> looper) : mLooper{looper} {}
-
-    int addFd(int fd, int ident, int events, const sp<LooperCallback>& callback,
-              void* data) override {
-        return mLooper->addFd(fd, ident, events, callback, data);
-    }
-
-    int removeFd(int fd) override { return mLooper->removeFd(fd); }
-
-    sp<Looper> getLooper() const override { return mLooper; }
-
-private:
-    sp<Looper> mLooper;
-};
-
 std::unique_ptr<KeyEvent> createKeyEvent(const InputMessage& msg) {
     std::unique_ptr<KeyEvent> event = std::make_unique<KeyEvent>();
     event->initialize(msg.body.key.eventId, msg.body.key.deviceId, msg.body.key.source,
@@ -201,12 +180,12 @@ using android::base::Result;
 // --- InputConsumerNoResampling ---
 
 InputConsumerNoResampling::InputConsumerNoResampling(const std::shared_ptr<InputChannel>& channel,
-                                                     std::shared_ptr<LooperInterface> looper,
+                                                     sp<Looper> looper,
                                                      InputConsumerCallbacks& callbacks,
                                                      std::unique_ptr<Resampler> resampler)
       : mChannel{channel},
         mLooper{looper},
-        mCallbacks(callbacks),
+        mCallbacks{callbacks},
         mResampler{std::move(resampler)},
         mFdEvents(0) {
     LOG_ALWAYS_FATAL_IF(mLooper == nullptr);
@@ -217,13 +196,6 @@ InputConsumerNoResampling::InputConsumerNoResampling(const std::shared_ptr<Input
     // incoming data.
     setFdEvents(ALOOPER_EVENT_INPUT);
 }
-
-InputConsumerNoResampling::InputConsumerNoResampling(const std::shared_ptr<InputChannel>& channel,
-                                                     sp<Looper> looper,
-                                                     InputConsumerCallbacks& callbacks,
-                                                     std::unique_ptr<Resampler> resampler)
-      : InputConsumerNoResampling(channel, std::make_shared<RealLooper>(looper), callbacks,
-                                  std::move(resampler)) {}
 
 InputConsumerNoResampling::~InputConsumerNoResampling() {
     ensureCalledOnLooperThread(__func__);
@@ -556,7 +528,7 @@ bool InputConsumerNoResampling::consumeBatchedInputEvents(
 
 void InputConsumerNoResampling::ensureCalledOnLooperThread(const char* func) const {
     sp<Looper> callingThreadLooper = Looper::getForThread();
-    if (callingThreadLooper != mLooper->getLooper()) {
+    if (callingThreadLooper != mLooper) {
         LOG(FATAL) << "The function " << func << " can only be called on the looper thread";
     }
 }

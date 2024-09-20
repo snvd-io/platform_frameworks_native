@@ -18,16 +18,15 @@
 
 #include <memory>
 #include <optional>
-#include <utility>
 
 #include <TestEventMatchers.h>
 #include <TestInputChannel.h>
-#include <TestLooper.h>
 #include <android-base/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <input/BlockingQueue.h>
 #include <input/InputEventBuilders.h>
+#include <utils/Looper.h>
 #include <utils/StrongPointer.h>
 
 namespace android {
@@ -46,11 +45,18 @@ class InputConsumerTest : public testing::Test, public InputConsumerCallbacks {
 protected:
     InputConsumerTest()
           : mClientTestChannel{std::make_shared<TestInputChannel>("TestChannel")},
-            mTestLooper{std::make_shared<TestLooper>()} {
-        Looper::setForThread(mTestLooper->getLooper());
+            mLooper{sp<Looper>::make(/*allowNonCallbacks=*/false)} {
+        Looper::setForThread(mLooper);
         mConsumer =
-                std::make_unique<InputConsumerNoResampling>(mClientTestChannel, mTestLooper, *this,
+                std::make_unique<InputConsumerNoResampling>(mClientTestChannel, mLooper, *this,
                                                             std::make_unique<LegacyResampler>());
+    }
+
+    void invokeLooperCallback() const {
+        sp<LooperCallback> callback;
+        ASSERT_TRUE(mLooper->getFdStateDebug(mClientTestChannel->getFd(), /*ident=*/nullptr,
+                                             /*events=*/nullptr, &callback, /*data=*/nullptr));
+        callback->handleEvent(mClientTestChannel->getFd(), ALOOPER_EVENT_INPUT, /*data=*/nullptr);
     }
 
     void assertOnBatchedInputEventPendingWasCalled() {
@@ -66,7 +72,7 @@ protected:
     }
 
     std::shared_ptr<TestInputChannel> mClientTestChannel;
-    std::shared_ptr<TestLooper> mTestLooper;
+    sp<Looper> mLooper;
     std::unique_ptr<InputConsumerNoResampling> mConsumer;
 
     BlockingQueue<std::unique_ptr<KeyEvent>> mKeyEvents;
@@ -128,7 +134,7 @@ TEST_F(InputConsumerTest, MessageStreamBatchedInMotionEvent) {
 
     mClientTestChannel->assertNoSentMessages();
 
-    mTestLooper->invokeCallback(mClientTestChannel->getFd(), ALOOPER_EVENT_INPUT);
+    invokeLooperCallback();
 
     assertOnBatchedInputEventPendingWasCalled();
 
@@ -166,7 +172,7 @@ TEST_F(InputConsumerTest, LastBatchedSampleIsLessThanResampleTime) {
 
     mClientTestChannel->assertNoSentMessages();
 
-    mTestLooper->invokeCallback(mClientTestChannel->getFd(), ALOOPER_EVENT_INPUT);
+    invokeLooperCallback();
 
     assertOnBatchedInputEventPendingWasCalled();
 
@@ -199,7 +205,7 @@ TEST_F(InputConsumerTest, BatchedEventsMultiDeviceConsumption) {
                                                .action(AMOTION_EVENT_ACTION_DOWN)
                                                .build());
 
-    mTestLooper->invokeCallback(mClientTestChannel->getFd(), ALOOPER_EVENT_INPUT);
+    invokeLooperCallback();
     assertReceivedMotionEvent(AllOf(WithDeviceId(0), WithMotionAction(AMOTION_EVENT_ACTION_DOWN)));
 
     mClientTestChannel->enqueueMessage(InputMessageBuilder{InputMessage::Type::MOTION, /*seq=*/1}
@@ -220,7 +226,7 @@ TEST_F(InputConsumerTest, BatchedEventsMultiDeviceConsumption) {
                                                .action(AMOTION_EVENT_ACTION_DOWN)
                                                .build());
 
-    mTestLooper->invokeCallback(mClientTestChannel->getFd(), ALOOPER_EVENT_INPUT);
+    invokeLooperCallback();
     assertReceivedMotionEvent(AllOf(WithDeviceId(1), WithMotionAction(AMOTION_EVENT_ACTION_DOWN)));
 
     mClientTestChannel->enqueueMessage(InputMessageBuilder{InputMessage::Type::MOTION, /*seq=*/5}
@@ -228,7 +234,7 @@ TEST_F(InputConsumerTest, BatchedEventsMultiDeviceConsumption) {
                                                .action(AMOTION_EVENT_ACTION_UP)
                                                .build());
 
-    mTestLooper->invokeCallback(mClientTestChannel->getFd(), ALOOPER_EVENT_INPUT);
+    invokeLooperCallback();
     assertReceivedMotionEvent(AllOf(WithDeviceId(0), WithMotionAction(AMOTION_EVENT_ACTION_MOVE),
                                     Not(MotionEventIsResampled())));
 
