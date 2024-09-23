@@ -213,10 +213,6 @@ public:
      * GRALLOC_USAGE_PROTECTED sense.
      */
     bool isProtected() const;
-    /*
-     * usesSourceCrop - true if content should use a source crop
-     */
-    bool usesSourceCrop() const { return hasBufferOrSidebandStream(); }
 
     Rect getCrop(const Layer::State& s) const { return s.crop; }
     bool needsFiltering(const DisplayDevice*) const;
@@ -247,17 +243,6 @@ public:
      * is latched. This will return false if there is no buffer currently presented.
      */
     bool willReleaseBufferOnLatch() const;
-
-    /*
-     * returns the rectangle that crops the content of the layer and scales it
-     * to the layer's size.
-     */
-    Rect getBufferCrop() const;
-
-    /*
-     * Returns the transform applied to the buffer.
-     */
-    uint32_t getBufferTransform() const;
 
     sp<GraphicBuffer> getBuffer() const;
     /**
@@ -366,8 +351,6 @@ public:
     void getFrameStats(FrameStats* outStats) const;
     void onDisconnect();
 
-    ui::Transform getTransform() const;
-
     half4 getColor() const;
     int32_t getBackgroundBlurRadius() const;
     bool drawShadows() const { return mEffectiveShadowRadius > 0.f; };
@@ -433,7 +416,6 @@ public:
 
     bool mPendingHWCDestroy{false};
 
-    bool setBufferCrop(const Rect& /* bufferCrop */);
     // See mPendingBufferTransactions
     void decrementPendingBufferCount();
     std::atomic<int32_t>* getPendingBufferCounter() { return &mPendingBufferTransactions; }

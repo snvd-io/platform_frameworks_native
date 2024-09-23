@@ -871,16 +871,6 @@ bool Layer::setTransformToDisplayInverse(bool transformToDisplayInverse) {
     return true;
 }
 
-bool Layer::setBufferCrop(const Rect& bufferCrop) {
-    if (mDrawingState.bufferCrop == bufferCrop) return false;
-
-    mDrawingState.sequence++;
-    mDrawingState.bufferCrop = bufferCrop;
-
-    setTransactionFlags(eTransactionNeeded);
-    return true;
-}
-
 void Layer::releasePreviousBuffer() {
     mReleasePreviousBuffer = true;
     if (!mBufferInfo.mBuffer ||
@@ -1566,25 +1556,6 @@ bool Layer::isProtected() const {
 
 bool Layer::getTransformToDisplayInverse() const {
     return mBufferInfo.mTransformToDisplayInverse;
-}
-
-Rect Layer::getBufferCrop() const {
-    // this is the crop rectangle that applies to the buffer
-    // itself (as opposed to the window)
-    if (!mBufferInfo.mCrop.isEmpty()) {
-        // if the buffer crop is defined, we use that
-        return mBufferInfo.mCrop;
-    } else if (mBufferInfo.mBuffer != nullptr) {
-        // otherwise we use the whole buffer
-        return mBufferInfo.mBuffer->getBounds();
-    } else {
-        // if we don't have a buffer yet, we use an empty/invalid crop
-        return Rect();
-    }
-}
-
-uint32_t Layer::getBufferTransform() const {
-    return mBufferInfo.mTransform;
 }
 
 ui::Dataspace Layer::translateDataspace(ui::Dataspace dataspace) {
