@@ -355,26 +355,6 @@ aidl::android::hardware::graphics::composer3::Composition Layer::getCompositionT
 // transaction
 // ----------------------------------------------------------------------------
 
-uint32_t Layer::doTransaction(uint32_t flags) {
-    SFTRACE_CALL();
-
-    const State& s(getDrawingState());
-
-    if (s.sequence != mLastCommittedTxSequence) {
-        // invalidate and recompute the visible regions if needed
-        mLastCommittedTxSequence = s.sequence;
-        flags |= eVisibleRegion;
-    }
-
-    if (!mPotentialCursor && (flags & Layer::eVisibleRegion)) {
-        mFlinger->mUpdateInputInfo = true;
-    }
-
-    commitTransaction();
-
-    return flags;
-}
-
 void Layer::commitTransaction() {
     // Set the present state for all bufferlessSurfaceFramesTX to Presented. The
     // bufferSurfaceFrameTX will be presented in latchBuffer.
@@ -387,12 +367,6 @@ void Layer::commitTransaction() {
         }
     }
     mDrawingState.bufferlessSurfaceFramesTX.clear();
-}
-
-uint32_t Layer::clearTransactionFlags(uint32_t mask) {
-    const auto flags = mTransactionFlags & mask;
-    mTransactionFlags &= ~mask;
-    return flags;
 }
 
 void Layer::setTransactionFlags(uint32_t mask) {

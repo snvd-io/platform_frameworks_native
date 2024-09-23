@@ -88,12 +88,6 @@ public:
     // Windows that are not in focus, but voted for a specific mode ID.
     static constexpr int32_t PRIORITY_NOT_FOCUSED_WITH_MODE = 2;
 
-    enum { // flags for doTransaction()
-        eDontUpdateGeometryState = 0x00000001,
-        eVisibleRegion = 0x00000002,
-        eInputInfoChanged = 0x00000004
-    };
-
     using FrameRate = scheduler::LayerInfo::FrameRate;
     using FrameRateCompatibility = scheduler::FrameRateCompatibility;
     using FrameRateSelectionStrategy = scheduler::LayerInfo::FrameRateSelectionStrategy;
@@ -298,8 +292,6 @@ public:
 
     const char* getDebugName() const;
 
-    uint32_t getTransactionFlags() const { return mTransactionFlags; }
-
     static bool computeTrustedPresentationState(const FloatRect& bounds,
                                                 const FloatRect& sourceBounds,
                                                 const Region& coveredRegion,
@@ -317,9 +309,6 @@ public:
     // Sets the masked bits.
     void setTransactionFlags(uint32_t mask);
 
-    // Clears and returns the masked bits.
-    uint32_t clearTransactionFlags(uint32_t mask);
-
     int32_t getSequence() const { return sequence; }
 
     // For tracing.
@@ -334,12 +323,6 @@ public:
                                       ui::LayerStack layerStack);
 
     gui::WindowInfo::Type getWindowType() const { return mWindowType; }
-
-    /*
-     * doTransaction - process the transaction. This is a good place to figure
-     * out which attributes of the surface have changed.
-     */
-    uint32_t doTransaction(uint32_t transactionFlags);
 
     inline const State& getDrawingState() const { return mDrawingState; }
     inline State& getDrawingState() { return mDrawingState; }
@@ -495,10 +478,6 @@ protected:
     int64_t mEnteredTrustedPresentationStateTime = -1;
 
     uint32_t mTransactionFlags{0};
-    // Updated in doTransaction, used to track the last sequence number we
-    // committed. Currently this is really only used for updating visible
-    // regions.
-    int32_t mLastCommittedTxSequence = -1;
 
     // Timestamp history for UIAutomation. Thread safe.
     FrameTracker mFrameTracker;
@@ -614,7 +593,7 @@ private:
     // You can understand the trace this way:
     //     - If the integer increases, a buffer arrived at the server.
     //     - If the integer decreases in latchBuffer, that buffer was latched
-    //     - If the integer decreases in setBuffer or doTransaction, a buffer was dropped
+    //     - If the integer decreases in setBuffer, a buffer was dropped
     std::atomic<int32_t> mPendingBufferTransactions{0};
 
     // Contains requested position and matrix updates. This will be applied if the client does
