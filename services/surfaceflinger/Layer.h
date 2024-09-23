@@ -165,9 +165,6 @@ public:
     static bool isLayerFocusedBasedOnPriority(int32_t priority);
     static void miniDumpHeader(std::string& result);
 
-    // Provide unique string for each class type in the Layer hierarchy
-    const char* getType() const { return "Layer"; }
-
     // This second set of geometry attributes are controlled by
     // setGeometryAppliesWithResize, and their default mode is to be
     // immediate. If setGeometryAppliesWithResize is specified
@@ -194,7 +191,6 @@ public:
                                           bool willPresent);
 
     sp<LayerFE> getCompositionEngineLayerFE(const frontend::LayerHierarchy::TraversalPath&);
-    sp<LayerFE> getOrCreateCompositionEngineLayerFE(const frontend::LayerHierarchy::TraversalPath&);
 
     // If we have received a new buffer this frame, we will pass its surface
     // damage down to hardware composer. Otherwise, we must send a region with
@@ -202,14 +198,7 @@ public:
     Region getVisibleRegion(const DisplayDevice*) const;
     void updateLastLatchTime(nsecs_t latchtime);
 
-    /*
-     * isProtected - true if the layer may contain protected contents in the
-     * GRALLOC_USAGE_PROTECTED sense.
-     */
-    bool isProtected() const;
-
     Rect getCrop(const Layer::State& s) const { return s.crop; }
-    bool needsFiltering(const DisplayDevice*) const;
 
     // from graphics API
     static ui::Dataspace translateDataspace(ui::Dataspace dataspace);
@@ -231,12 +220,6 @@ public:
      */
     bool latchBufferImpl(bool& /*recomputeVisibleRegions*/, nsecs_t /*latchTime*/,
                          bool bgColorOnly);
-
-    /*
-     * Returns true if the currently presented buffer will be released when this layer state
-     * is latched. This will return false if there is no buffer currently presented.
-     */
-    bool willReleaseBufferOnLatch() const;
 
     sp<GraphicBuffer> getBuffer() const;
     /**
@@ -322,8 +305,6 @@ public:
     void writeCompositionStateToProto(perfetto::protos::LayerProto* layerProto,
                                       ui::LayerStack layerStack);
 
-    gui::WindowInfo::Type getWindowType() const { return mWindowType; }
-
     inline const State& getDrawingState() const { return mDrawingState; }
     inline State& getDrawingState() { return mDrawingState; }
 
@@ -334,11 +315,6 @@ public:
     void getFrameStats(FrameStats* outStats) const;
     void onDisconnect();
 
-    half4 getColor() const;
-    int32_t getBackgroundBlurRadius() const;
-    bool drawShadows() const { return mEffectiveShadowRadius > 0.f; };
-
-    bool isHandleAlive() const { return mHandleAlive; }
     bool onHandleDestroyed() { return mHandleAlive = false; }
 
     /**
@@ -349,7 +325,6 @@ public:
      */
     Rect getCroppedBufferSize(const Layer::State& s) const;
 
-    void setFrameTimelineInfoForBuffer(const FrameTimelineInfo& /*info*/) {}
     void setFrameTimelineVsyncForBufferTransaction(const FrameTimelineInfo& info, nsecs_t postTime,
                                                    gui::GameMode gameMode);
     void setFrameTimelineVsyncForBufferlessTransaction(const FrameTimelineInfo& info,
@@ -378,13 +353,8 @@ public:
     // this to be called once.
     sp<IBinder> getHandle();
     const std::string& getName() const { return mName; }
-    void setInputInfo(const gui::WindowInfo& info);
 
     virtual uid_t getOwnerUid() const { return mOwnerUid; }
-
-    pid_t getOwnerPid() { return mOwnerPid; }
-
-    int32_t getOwnerAppId() { return mOwnerAppId; }
 
     // Used to check if mUsedVsyncIdForRefreshRateSelection should be expired when it stop updating.
     nsecs_t mMaxTimeForUseVsyncId = 0;
@@ -396,8 +366,6 @@ public:
     // have a stable sort order when their layer stack and Z-order are
     // the same.
     const int32_t sequence;
-
-    bool mPendingHWCDestroy{false};
 
     // See mPendingBufferTransactions
     void decrementPendingBufferCount();

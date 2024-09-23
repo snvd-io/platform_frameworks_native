@@ -1459,10 +1459,6 @@ void Layer::onCompositionPresented(const DisplayDevice* display,
     mBufferInfo.mFrameLatencyNeeded = false;
 }
 
-bool Layer::willReleaseBufferOnLatch() const {
-    return !mDrawingState.buffer && mBufferInfo.mBuffer;
-}
-
 bool Layer::latchBufferImpl(bool& recomputeVisibleRegions, nsecs_t latchTime, bool bgColorOnly) {
     SFTRACE_FORMAT_INSTANT("latchBuffer %s - %" PRIu64, getDebugName(),
                            getDrawingState().frameNumber);
@@ -1521,11 +1517,6 @@ bool Layer::latchBufferImpl(bool& recomputeVisibleRegions, nsecs_t latchTime, bo
         }
     }
     return true;
-}
-
-bool Layer::isProtected() const {
-    return (mBufferInfo.mBuffer != nullptr) &&
-            (mBufferInfo.mBuffer->getUsage() & GRALLOC_USAGE_PROTECTED);
 }
 
 bool Layer::getTransformToDisplayInverse() const {
